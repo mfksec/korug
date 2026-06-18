@@ -65,7 +65,7 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/subdomain_hunter.git
+git clone https://github.com/mfksec/subdomain_hunter.git
 cd subdomain_hunter
 
 # Create virtual environment
