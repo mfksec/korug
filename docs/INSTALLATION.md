@@ -5,7 +5,7 @@
 ### Using Docker (Recommended)
 
 ```bash
-git clone https://github.com/yourusername/subdomain_hunter.git
+git clone https://github.com/mfksec/subdomain_hunter.git
 cd subdomain_hunter
 
 # Copy environment template
@@ -35,7 +35,7 @@ Visit: `http://localhost:8000/docs` to see the API documentation.
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/subdomain_hunter.git
+git clone https://github.com/mfksec/subdomain_hunter.git
 cd subdomain_hunter
 
 # Create virtual environment

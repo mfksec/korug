@@ -18,7 +18,7 @@ A comprehensive subdomain security monitoring tool that discovers subdomains, de
 ### Using Docker (1 minute setup)
 
 ```bash
-git clone https://github.com/yourusername/subdomain_hunter.git
+git clone https://github.com/mfksec/subdomain_hunter.git
 cd subdomain_hunter
 cp .env.example .env
 docker-compose -f docker/docker-compose.yml up -d
@@ -143,5 +143,5 @@ For security issues, please see [SECURITY.md](SECURITY.md) - do not open public 
 ## Support
 
 - 📚 Check [documentation](docs/)
-- 🐛 [Report issues](https://github.com/yourusername/subdomain_hunter/issues)
-- 💬 [Start a discussion](https://github.com/yourusername/subdomain_hunter/discussions)
+- 🐛 [Report issues](https://github.com/mfksec/subdomain_hunter/issues)
+- 💬 [Start a discussion](https://github.com/mfksec/subdomain_hunter/discussions)
