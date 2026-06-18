@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: subdomain_hunter_db
+    environment:
+      POSTGRES_DB: subdomain_hunter
+      POSTGRES_USER: subdomain_user
+      POSTGRES_PASSWORD: subdomain_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U subdomain_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  subdomain-hunter:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: subdomain_hunter_app
+    environment:
+      DATABASE_URL: postgresql://subdomain_user:subdomain_password@postgres:5432/subdomain_hunter
+      FASTAPI_ENV: production
+      FASTAPI_DEBUG: "false"
+      HOST: 0.0.0.0
+      PORT: 8000
+      # Optional: Configure these with your API keys
+      # SHODAN_API_KEY: your-key-here
+      # URLSCAN_API_KEY: your-key-here
+      # SLACK_WEBHOOK_URL: your-webhook-url
+      # SLACK_ENABLED: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./exports:/app/exports
+    command: python -m subdomain_hunter.run
+
+volumes:
+  postgres_data:
