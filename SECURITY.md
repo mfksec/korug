@@ -4,7 +4,7 @@
 
 **Do not** open a public GitHub issue for security vulnerabilities.
 
-Instead, please email security@example.com with:
+Instead, please email security@amboss.com with:
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
