@@ -8,11 +8,14 @@ import {
   Menu,
   MenuItem,
 } from '@mui/material'
+import { useNavigate, useLocation } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import { useAuth } from '@/hooks/useAuth'
 
-export const Navbar: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
-  const { user } = useAuth()
+export const Navbar: React.FC = () => {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null)
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
@@ -23,17 +26,52 @@ export const Navbar: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     setAnchorEl(null)
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     handleClose()
-    onLogout()
+    await logout()
+    navigate('/login')
   }
+
+  const navItems = [
+    { label: 'Dashboard', path: '/dashboard' },
+    { label: 'Vulnerabilities', path: '/vulnerabilities' },
+    { label: 'Alerts', path: '/alerts' },
+    { label: 'Settings', path: '/settings' },
+    { label: 'Audit Logs', path: '/audit-logs' },
+  ]
+
+  const isActive = (path: string) => location.pathname === path
 
   return (
     <AppBar position="static">
       <Toolbar>
-        <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
+        <Typography
+          variant="h6"
+          sx={{ flexGrow: 1, fontWeight: 'bold', cursor: 'pointer' }}
+          onClick={() => navigate('/dashboard')}
+        >
           🔍 Subdomain Hunter
         </Typography>
+
+        {/* Navigation Links */}
+        <Box sx={{ display: 'flex', gap: 1, mr: 2 }}>
+          {navItems.map((item) => (
+            <Button
+              key={item.path}
+              color="inherit"
+              onClick={() => navigate(item.path)}
+              sx={{
+                textTransform: 'none',
+                borderBottom: isActive(item.path) ? '2px solid white' : 'none',
+                pb: isActive(item.path) ? '14px' : 'auto',
+              }}
+            >
+              {item.label}
+            </Button>
+          ))}
+        </Box>
+
+        {/* User Menu */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Typography variant="body2">{user?.email}</Typography>
           <Button
