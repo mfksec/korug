@@ -7,6 +7,7 @@ from fastapi.security import HTTPBearer
 from passlib.context import CryptContext
 
 from subdomain_hunter.config import get_settings
+from subdomain_hunter.token_blacklist import is_blacklisted
 
 settings = get_settings()
 security = HTTPBearer()
@@ -107,8 +108,16 @@ def verify_token(token: str, token_type: str = "access") -> Dict[str, Any]:
 
 
 async def get_current_user(credentials = Depends(security)) -> Dict[str, Any]:
-    """Get current user from token with type validation."""
+    """Get current user from token with type validation and blacklist check."""
     token = credentials.credentials
+    
+    # Check if token is blacklisted (e.g., after logout)
+    if is_blacklisted(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+        )
+    
     payload = verify_token(token, token_type="access")
     return payload
 
