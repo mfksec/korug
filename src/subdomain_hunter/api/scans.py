@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from subdomain_hunter.db import get_db
+from subdomain_hunter.auth_utils import get_current_user
 from subdomain_hunter.models import (
     Domain,
     Subdomain,
@@ -139,7 +140,12 @@ async def perform_scan(domain_id: int, db: Session):
 
 
 @router.post("/{domain_id}/scan")
-def trigger_scan(domain_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def trigger_scan(
+    domain_id: int, 
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Trigger a scan for a domain."""
     domain = db.query(Domain).filter(Domain.id == domain_id).first()
     if not domain:
@@ -155,7 +161,11 @@ def trigger_scan(domain_id: int, background_tasks: BackgroundTasks, db: Session 
 
 
 @router.get("/{domain_id}/results")
-def get_scan_results(domain_id: int, db: Session = Depends(get_db)):
+def get_scan_results(
+    domain_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Get latest scan results for a domain."""
     domain = db.query(Domain).filter(Domain.id == domain_id).first()
     if not domain:
@@ -181,7 +191,13 @@ def get_scan_results(domain_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/history/{domain_id}")
-def get_scan_history(domain_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def get_scan_history(
+    domain_id: int, 
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Get scan history for a domain."""
     domain = db.query(Domain).filter(Domain.id == domain_id).first()
     if not domain:
