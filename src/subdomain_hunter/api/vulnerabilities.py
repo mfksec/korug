@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from subdomain_hunter.db import get_db
+from subdomain_hunter.auth_utils import get_current_user
+from subdomain_hunter.audit import log_audit_event, AuditEvent
 from subdomain_hunter.models import Vulnerability, VulnerabilityUpdate, VulnerabilityResponse
 
 logger = logging.getLogger(__name__)
@@ -21,6 +23,7 @@ def list_vulnerabilities(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """List vulnerabilities with optional filtering."""
     query = db.query(Vulnerability)
@@ -36,7 +39,11 @@ def list_vulnerabilities(
 
 
 @router.get("/{vuln_id}", response_model=VulnerabilityResponse)
-def get_vulnerability(vuln_id: int, db: Session = Depends(get_db)):
+def get_vulnerability(
+    vuln_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """Get a specific vulnerability."""
     vuln = db.query(Vulnerability).filter(Vulnerability.id == vuln_id).first()
     if not vuln:
@@ -52,6 +59,7 @@ def update_vulnerability(
     vuln_id: int,
     update: VulnerabilityUpdate,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """Update vulnerability (mark as false positive, etc.)."""
     vuln = db.query(Vulnerability).filter(Vulnerability.id == vuln_id).first()
@@ -67,11 +75,27 @@ def update_vulnerability(
     db.add(vuln)
     db.commit()
     db.refresh(vuln)
+    
+    log_audit_event(
+        AuditEvent.VULNERABILITY_UPDATED,
+        user=current_user['sub'],
+        resource_type="vulnerability",
+        resource_id=vuln_id,
+        details={
+            "is_false_positive": update.is_false_positive,
+            "reason": update.false_positive_reason
+        }
+    )
+    
     return vuln
 
 
 @router.delete("/{vuln_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_vulnerability(vuln_id: int, db: Session = Depends(get_db)):
+def delete_vulnerability(
+    vuln_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """Delete a vulnerability record."""
     vuln = db.query(Vulnerability).filter(Vulnerability.id == vuln_id).first()
     if not vuln:
@@ -79,6 +103,14 @@ def delete_vulnerability(vuln_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Vulnerability with id {vuln_id} not found",
         )
+    
+    log_audit_event(
+        AuditEvent.VULNERABILITY_DELETED,
+        user=current_user['sub'],
+        resource_type="vulnerability",
+        resource_id=vuln_id,
+        details={"vulnerability_type": getattr(vuln, 'vulnerability_type', 'unknown')}
+    )
     
     db.delete(vuln)
     db.commit()
@@ -88,7 +120,10 @@ def delete_vulnerability(vuln_id: int, db: Session = Depends(get_db)):
 # Chart/Analytics Endpoints
 
 @router.get("/stats/summary")
-def get_vulnerability_stats(db: Session = Depends(get_db)):
+def get_vulnerability_stats(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """Get vulnerability statistics for charts.
     
     Returns: {
@@ -149,7 +184,11 @@ def get_vulnerability_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/stats/timeline")
-def get_vulnerability_timeline(days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db)):
+def get_vulnerability_timeline(
+    days: int = Query(30, ge=1, le=365), 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """Get vulnerability discovery timeline for the past N days.
     
     Returns: [{date: "YYYY-MM-DD", count: int}, ...]
@@ -190,7 +229,10 @@ def get_vulnerability_timeline(days: int = Query(30, ge=1, le=365), db: Session 
 
 
 @router.get("/stats/confidence-distribution")
-def get_confidence_distribution(db: Session = Depends(get_db)):
+def get_confidence_distribution(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """Get vulnerability distribution by confidence score severity.
     
     Returns: [

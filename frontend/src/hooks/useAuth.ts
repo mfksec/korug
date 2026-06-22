@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { authAPI } from '@/api/auth'
 import { User, LoginRequest } from '@/types'
-import { setTokens, clearTokens, getStoredToken, getRefreshToken } from '@/utils/storage'
+import { setTokens, clearTokens, getStoredToken } from '@/utils/storage'
 
 export const useAuth = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!getStoredToken())
@@ -9,7 +9,7 @@ export const useAuth = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const login = useCallback(async (credentials: LoginRequest) => {
+  const login = useCallback(async (credentials: LoginRequest): Promise<boolean> => {
     setIsLoading(true)
     setError(null)
     try {
@@ -21,8 +21,8 @@ export const useAuth = () => {
       setUser(userInfo)
       setIsAuthenticated(true)
       return true
-    } catch (err: any) {
-      const message = err.response?.data?.detail || 'Login failed'
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Login failed'
       setError(message)
       return false
     } finally {
