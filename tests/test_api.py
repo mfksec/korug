@@ -10,6 +10,24 @@ def test_health_check(client):
     assert response.json()["status"] == "healthy"
 
 
+def test_logout(client):
+    """Test logout endpoint invalidates the token."""
+    response = client.post("/api/auth/logout")
+    assert response.status_code == 200
+    assert response.json()["message"] == "Logged out successfully"
+
+
+def test_revoked_token_returns_401(client):
+    """Test that a token used after logout is rejected with 401."""
+    # Logout to blacklist the current token
+    logout_response = client.post("/api/auth/logout")
+    assert logout_response.status_code == 200
+
+    # Subsequent request with the same (now revoked) token should be rejected
+    response = client.get("/api/auth/me")
+    assert response.status_code == 401
+
+
 def test_create_domain(client):
     """Test creating a domain."""
     response = client.post(

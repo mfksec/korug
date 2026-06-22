@@ -1,12 +1,18 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Optional
+import jwt
 
-from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi import FastAPI, HTTPException, Request, status, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from subdomain_hunter.config import get_settings
 from subdomain_hunter.db import init_db
@@ -20,6 +26,7 @@ from subdomain_hunter.auth_utils import (
     hash_password,
     verify_password,
 )
+from subdomain_hunter.token_blacklist import add_to_blacklist
 
 logger = logging.getLogger(__name__)
 app_settings = get_settings()
@@ -78,6 +85,20 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         debug=app_settings.fastapi_debug,
     )
+    
+    # Initialize rate limiter
+    if app_settings.enable_rate_limiting:
+        limiter = Limiter(key_func=get_remote_address)
+        app.state.limiter = limiter
+        
+        @app.exception_handler(RateLimitExceeded)
+        async def rate_limit_exception_handler(request, exc):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Please try again later."},
+            )
+    else:
+        app.state.limiter = None
 
     # Parse CORS origins from configuration
     allowed_origins = [
@@ -142,8 +163,20 @@ def create_app() -> FastAPI:
 
     # Authentication endpoints
     @app.post("/api/auth/login", response_model=TokenResponse)
-    async def login(request: LoginRequest):
-        """Login endpoint - returns access and refresh tokens."""
+    async def login(request: LoginRequest, response: Response):
+        """Login endpoint - returns access and refresh tokens.
+        
+        SECURITY: 
+        - Rate limited to prevent brute force attacks
+        - Optional httpOnly cookies for token storage
+        """
+        # Apply rate limiting if enabled
+        if app.state.limiter:
+            await app.state.limiter.hit(
+                f"login_{request.username}",
+                app_settings.login_rate_limit
+            )
+        
         # For demo: accept any non-empty credentials
         # In production: validate against user database with password hashing
         if not request.username or not request.password:
@@ -175,14 +208,39 @@ def create_app() -> FastAPI:
         access_token = create_access_token({"sub": request.username, "type": "access"})
         refresh_token = create_refresh_token({"sub": request.username})
         
+        # Option 1: Use httpOnly cookies (recommended for production)
+        if app_settings.use_httponly_cookies:
+            response.set_cookie(
+                "access_token",
+                access_token,
+                httponly=True,
+                secure=app_settings.cookie_secure,
+                samesite="Strict",
+                max_age=3600  # 1 hour
+            )
+            response.set_cookie(
+                "refresh_token",
+                refresh_token,
+                httponly=True,
+                secure=app_settings.cookie_secure,
+                samesite="Strict",
+                max_age=604800  # 7 days
+            )
+        
+        # Return tokens in body (always, for frontend compatibility)
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
         }
 
     @app.post("/api/auth/refresh")
-    async def refresh_access_token(request: RefreshTokenRequest):
-        """Refresh access token using refresh token."""
+    async def refresh_access_token(request: RefreshTokenRequest, response: Response):
+        """Refresh access token using refresh token.
+        
+        SECURITY:
+        - Validates refresh token type
+        - Optional httpOnly cookie-based storage
+        """
         try:
             payload = verify_token(request.refresh_token, token_type="refresh")
             
@@ -193,6 +251,19 @@ def create_app() -> FastAPI:
             )
             
             access_token = create_access_token({"sub": payload["sub"], "type": "access"})
+            
+            # Option 1: Use httpOnly cookies
+            if app_settings.use_httponly_cookies:
+                response.set_cookie(
+                    "access_token",
+                    access_token,
+                    httponly=True,
+                    secure=app_settings.cookie_secure,
+                    samesite="Strict",
+                    max_age=3600  # 1 hour
+                )
+            
+            # Return token in body (always, for frontend compatibility)
             return {"access_token": access_token}
         except HTTPException:
             log_audit_event(
@@ -216,9 +287,33 @@ def create_app() -> FastAPI:
             )
 
     @app.post("/api/auth/logout")
-    async def logout(current_user: dict = Depends(get_current_user)):
-        """Logout endpoint."""
+    async def logout(request: Request, current_user: dict = Depends(get_current_user)):
+        """Logout endpoint - invalidates token by adding to blacklist.
+        
+        SECURITY:
+        - Token is added to revocation blacklist
+        - Future attempts to use this token will be rejected
+        - Solves client-side expiry check vulnerability
+        """
         username = current_user['sub']
+        auth_header = request.headers.get("authorization", "")
+        token = auth_header.removeprefix("Bearer ").strip()
+        
+        # Extract token expiration and add to blacklist
+        try:
+            token_payload = jwt.decode(
+                token,
+                app_settings.jwt_secret_key,
+                algorithms=["HS256"]
+            )
+            exp_time = token_payload.get('exp')
+            if exp_time:
+                exp_datetime = datetime.fromtimestamp(exp_time, tz=timezone.utc)
+                # Add token to blacklist until expiration
+                add_to_blacklist(token, exp_datetime)
+        except Exception as e:
+            logger.warning(f"Could not extract token expiry for blacklist: {e}")
+        
         logger.info(f"User {username} logged out")
         
         log_audit_event(
@@ -227,7 +322,6 @@ def create_app() -> FastAPI:
             status="success"
         )
         
-        # Token is invalidated on client side by removing from localStorage
         return {"message": "Logged out successfully"}
 
     @app.get("/api/auth/me", response_model=UserResponse)
