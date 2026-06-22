@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from subdomain_hunter.db import get_db
 from subdomain_hunter.auth_utils import get_current_user
+from subdomain_hunter.audit import log_audit_event, AuditEvent
 from subdomain_hunter.models import (
     Domain,
     Subdomain,
@@ -153,6 +154,14 @@ def trigger_scan(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Domain with id {domain_id} not found",
         )
+    
+    log_audit_event(
+        AuditEvent.SCAN_TRIGGERED,
+        user=current_user['sub'],
+        resource_type="domain",
+        resource_id=domain_id,
+        details={"domain_name": domain.domain_name}
+    )
     
     # Add scan task to background
     background_tasks.add_task(perform_scan, domain_id, db)

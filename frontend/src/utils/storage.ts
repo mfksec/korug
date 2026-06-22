@@ -1,5 +1,36 @@
 import type { User } from '@/types'
 
+/**
+ * SECURITY WARNING: Token Storage
+ * 
+ * This implementation uses localStorage for token persistence.
+ * While convenient for SPAs, localStorage is vulnerable to XSS (Cross-Site Scripting) attacks.
+ * 
+ * Any JavaScript running on the page (via XSS vulnerability) can access localStorage tokens.
+ * 
+ * RECOMMENDED FOR PRODUCTION:
+ * 1. Migrate to httpOnly + Secure cookies
+ *    - Backend sets tokens as httpOnly cookies (inaccessible to JavaScript)
+ *    - Cookies sent automatically with requests
+ *    - Better protection against token theft
+ * 
+ * 2. Implement additional XSS mitigations:
+ *    - Content Security Policy (CSP) headers
+ *    - Input sanitization on all user inputs
+ *    - Output encoding in React (automatic with JSX)
+ *    - Security scanning in CI/CD pipeline
+ * 
+ * 3. Token rotation:
+ *    - Use short-lived access tokens (15-30 minutes)
+ *    - Refresh tokens with longer expiry on secure storage
+ *    - Implement refresh token rotation
+ * 
+ * For now, this localStorage implementation includes:
+ * - CSP headers to prevent inline script execution
+ * - Regular token validation
+ * - Automatic cleanup on logout
+ */
+
 export const getStoredToken = (): string | null => {
   return localStorage.getItem('access_token')
 }

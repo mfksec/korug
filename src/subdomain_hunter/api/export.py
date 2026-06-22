@@ -11,6 +11,7 @@ from openpyxl.styles import Font, PatternFill
 
 from subdomain_hunter.db import get_db
 from subdomain_hunter.auth_utils import get_current_user
+from subdomain_hunter.audit import log_audit_event, AuditEvent
 from subdomain_hunter.models import Domain, Subdomain, Vulnerability
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,14 @@ def export_to_xlsx(
     output = BytesIO()
     wb.save(output)
     output.seek(0)
+    
+    log_audit_event(
+        AuditEvent.EXPORT_INITIATED,
+        user=current_user['sub'],
+        resource_type="domain",
+        resource_id=domain_id,
+        details={"domain_name": domain.domain_name, "format": "xlsx"}
+    )
     
     return FileResponse(
         iter([output.getvalue()]),
