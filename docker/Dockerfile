@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     wget \
+    unzip \
     build-essential \
     libssl-dev \
     libffi-dev \
@@ -14,18 +15,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Subfinder
-RUN curl -L https://github.com/projectdiscovery/subfinder/releases/download/v2.5.9/subfinder_2.5.9_linux_amd64.zip -o subfinder.zip && \
+RUN curl -fsSL --retry 3 --retry-delay 2 https://github.com/projectdiscovery/subfinder/releases/download/v2.14.0/subfinder_2.14.0_linux_amd64.zip -o subfinder.zip && \
     unzip subfinder.zip && \
     mv subfinder /usr/local/bin/ && \
     chmod +x /usr/local/bin/subfinder && \
     rm subfinder.zip
 
 # Install Amass
-RUN curl -L https://github.com/OWASP/Amass/releases/download/v4.1.1/amass_linux_amd64.zip -o amass.zip && \
-    unzip amass.zip && \
+RUN curl -fsSL --retry 3 --retry-delay 2 https://github.com/owasp-amass/amass/releases/download/v5.1.1/amass_linux_amd64.tar.gz -o amass.tar.gz && \
+    tar -xzf amass.tar.gz && \
     mv amass_linux_amd64/amass /usr/local/bin/ && \
     chmod +x /usr/local/bin/amass && \
-    rm -rf amass.zip amass_linux_amd64
+    rm -rf amass.tar.gz amass_linux_amd64
 
 # Copy requirements
 COPY requirements.txt .
