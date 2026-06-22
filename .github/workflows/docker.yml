@@ -15,4 +15,9 @@ jobs:
     - name: Build Docker image
       run: |
         docker build -f docker/Dockerfile -t subdomain-hunter:latest .
-        docker run --rm subdomain-hunter:latest python -m subdomain_hunter.cli --help
+        docker run --rm \
+          -e DATABASE_URL="sqlite:////tmp/subdomain_hunter.db" \
+          -e JWT_SECRET_KEY="ci-jwt-secret-key-0123456789abcdef" \
+          -e API_KEY="ci-api-key-0123456789abcdef" \
+          -e ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173" \
+          subdomain-hunter:latest python -m subdomain_hunter.cli --help
