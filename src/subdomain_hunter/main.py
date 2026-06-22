@@ -8,6 +8,7 @@ import jwt
 from fastapi import FastAPI, HTTPException, Request, status, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
