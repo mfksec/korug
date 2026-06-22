@@ -22,7 +22,7 @@ RUN curl -fsSL --retry 3 --retry-delay 2 https://github.com/projectdiscovery/sub
     rm subfinder.zip
 
 # Install Amass
-RUN curl -L https://github.com/owasp-amass/amass/releases/download/v5.1.1/amass_linux_amd64.zip -o amass.zip && \
+RUN curl -fsSL --retry 3 --retry-delay 2 https://github.com/owasp-amass/amass/releases/download/v5.1.1/amass_linux_amd64.zip -o amass.zip && \
     unzip amass.zip && \
     mv amass_linux_amd64/amass /usr/local/bin/ && \
     chmod +x /usr/local/bin/amass && \
