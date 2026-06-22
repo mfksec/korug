@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer
 
 from subdomain_hunter.config import get_settings
 
@@ -65,7 +65,7 @@ def verify_token(token: str) -> Dict[str, Any]:
         )
 
 
-async def get_current_user(credentials: HTTPAuthCredentials = Depends(security)) -> Dict[str, Any]:
+async def get_current_user(credentials = Depends(security)) -> Dict[str, Any]:
     """Get current user from token."""
     token = credentials.credentials
     payload = verify_token(token)
