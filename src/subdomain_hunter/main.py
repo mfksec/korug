@@ -1,11 +1,13 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Optional
 import jwt
 
-from fastapi import FastAPI, HTTPException, status, Depends, Response
+from fastapi import FastAPI, HTTPException, Request, status, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -23,7 +25,7 @@ from subdomain_hunter.auth_utils import (
     hash_password,
     verify_password,
 )
-from subdomain_hunter.token_blacklist import add_to_blacklist, cleanup_expired_tokens
+from subdomain_hunter.token_blacklist import add_to_blacklist
 
 logger = logging.getLogger(__name__)
 app_settings = get_settings()
@@ -90,10 +92,10 @@ def create_app() -> FastAPI:
         
         @app.exception_handler(RateLimitExceeded)
         async def rate_limit_exception_handler(request, exc):
-            return {
-                "detail": "Rate limit exceeded. Please try again later.",
-                "status": 429
-            }
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded. Please try again later."},
+            )
     else:
         app.state.limiter = None
 
@@ -223,12 +225,8 @@ def create_app() -> FastAPI:
                 samesite="Strict",
                 max_age=604800  # 7 days
             )
-            return {
-                "access_token": None,
-                "refresh_token": None,
-            }
         
-        # Option 2: Return tokens (current - requires frontend to store securely)
+        # Return tokens in body (always, for frontend compatibility)
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -263,9 +261,8 @@ def create_app() -> FastAPI:
                     samesite="Strict",
                     max_age=3600  # 1 hour
                 )
-                return {"access_token": None}
             
-            # Option 2: Return token
+            # Return token in body (always, for frontend compatibility)
             return {"access_token": access_token}
         except HTTPException:
             log_audit_event(
@@ -289,7 +286,7 @@ def create_app() -> FastAPI:
             )
 
     @app.post("/api/auth/logout")
-    async def logout(current_user: dict = Depends(get_current_user), credentials = Depends(HTTPBearer())):
+    async def logout(request: Request, current_user: dict = Depends(get_current_user)):
         """Logout endpoint - invalidates token by adding to blacklist.
         
         SECURITY:
@@ -298,7 +295,8 @@ def create_app() -> FastAPI:
         - Solves client-side expiry check vulnerability
         """
         username = current_user['sub']
-        token = credentials.credentials
+        auth_header = request.headers.get("authorization", "")
+        token = auth_header.removeprefix("Bearer ").strip()
         
         # Extract token expiration and add to blacklist
         try:
@@ -309,8 +307,7 @@ def create_app() -> FastAPI:
             )
             exp_time = token_payload.get('exp')
             if exp_time:
-                from datetime import datetime
-                exp_datetime = datetime.fromtimestamp(exp_time)
+                exp_datetime = datetime.fromtimestamp(exp_time, tz=timezone.utc)
                 # Add token to blacklist until expiration
                 add_to_blacklist(token, exp_datetime)
         except Exception as e:
