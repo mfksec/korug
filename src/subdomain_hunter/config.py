@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     
     # AWS
     aws_region: str = Field(default="us-east-1")
+    
+    # Security: Rate Limiting
+    enable_rate_limiting: bool = Field(default=True)
+    login_rate_limit: str = Field(default="5/minute")  # Format: "requests/time_period"
+    api_rate_limit: str = Field(default="100/minute")
+    
+    # Security: httpOnly Cookies (recommended for production)
+    use_httponly_cookies: bool = Field(default=False)  # Enable in production
+    cookie_secure: bool = Field(default_factory=lambda: os.environ.get("FASTAPI_ENV", "development") != "development")
 
     @field_validator("database_url", mode="before")
     @classmethod
