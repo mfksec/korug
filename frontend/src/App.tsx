@@ -27,10 +27,6 @@ function App() {
     return <LoadingSpinner message="Loading..." />
   }
 
-  const handleLogout = async () => {
-    // Logout is handled by the useAuth hook
-  }
-
   return (
     <BrowserRouter>
       <Routes>

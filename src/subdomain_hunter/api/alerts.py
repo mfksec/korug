@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from subdomain_hunter.db import get_db
+from subdomain_hunter.auth_utils import get_current_user
+from subdomain_hunter.audit import log_audit_event, AuditEvent
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -105,6 +107,7 @@ def list_alerts(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """List alerts with optional filtering.
     
@@ -140,7 +143,11 @@ def list_alerts(
 
 
 @router.get("/{alert_id}", response_model=AlertResponse)
-def get_alert(alert_id: int, db: Session = Depends(get_db)):
+def get_alert(
+    alert_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Get a specific alert."""
     for alert in MOCK_ALERTS:
         if alert["id"] == alert_id:
@@ -156,6 +163,7 @@ def get_alert(alert_id: int, db: Session = Depends(get_db)):
 def create_alert(
     alert: AlertCreate,
     db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """Create a new alert."""
     new_id = max([a["id"] for a in MOCK_ALERTS]) + 1 if MOCK_ALERTS else 1
@@ -174,7 +182,11 @@ def create_alert(
 
 
 @router.post("/{alert_id}/resolve", response_model=AlertResponse)
-def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
+def resolve_alert(
+    alert_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Mark an alert as resolved."""
     for alert in MOCK_ALERTS:
         if alert["id"] == alert_id:
@@ -189,7 +201,11 @@ def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{alert_id}/unresolve", response_model=AlertResponse)
-def unresolve_alert(alert_id: int, db: Session = Depends(get_db)):
+def unresolve_alert(
+    alert_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Mark a resolved alert as unresolved."""
     for alert in MOCK_ALERTS:
         if alert["id"] == alert_id:
@@ -204,7 +220,10 @@ def unresolve_alert(alert_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/stats/summary")
-def get_alert_stats(db: Session = Depends(get_db)):
+def get_alert_stats(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Get alert statistics.
     
     Returns: {
@@ -230,7 +249,11 @@ def get_alert_stats(db: Session = Depends(get_db)):
 
 
 @router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_alert(alert_id: int, db: Session = Depends(get_db)):
+def delete_alert(
+    alert_id: int, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """Delete an alert."""
     for i, alert in enumerate(MOCK_ALERTS):
         if alert["id"] == alert_id:
