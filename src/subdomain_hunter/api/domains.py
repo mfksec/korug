@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from subdomain_hunter.db import get_db
 from subdomain_hunter.auth_utils import get_current_user
+from subdomain_hunter.audit import log_audit_event, AuditEvent
 from subdomain_hunter.models import Domain, DomainCreate, DomainUpdate, DomainResponse
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,14 @@ def create_domain(
     # Check if domain already exists
     existing = db.query(Domain).filter(Domain.domain_name == domain.domain_name).first()
     if existing:
+        log_audit_event(
+            AuditEvent.DOMAIN_CREATED,
+            user=current_user['sub'],
+            resource_type="domain",
+            resource_id=existing.id,
+            status="failure",
+            details={"reason": "already_exists"}
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Domain {domain.domain_name} already exists",
@@ -32,6 +41,14 @@ def create_domain(
     db.add(db_domain)
     db.commit()
     db.refresh(db_domain)
+    
+    log_audit_event(
+        AuditEvent.DOMAIN_CREATED,
+        user=current_user['sub'],
+        resource_type="domain",
+        resource_id=db_domain.id,
+        details={"domain_name": domain.domain_name}
+    )
     logger.info(f"Domain {domain.domain_name} created by {current_user['sub']}")
     return db_domain
 
@@ -103,6 +120,14 @@ def delete_domain(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Domain with id {domain_id} not found",
         )
+    
+    log_audit_event(
+        AuditEvent.DOMAIN_DELETED,
+        user=current_user['sub'],
+        resource_type="domain",
+        resource_id=domain_id,
+        details={"domain_name": domain.domain_name}
+    )
     
     db.delete(domain)
     db.commit()

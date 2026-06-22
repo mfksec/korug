@@ -1,5 +1,36 @@
 import axios, { AxiosInstance, AxiosError } from 'axios'
 
+/**
+ * SECURITY NOTE: Token Refresh & Auto-Retry
+ * 
+ * This client implements automatic token refresh on 401 responses.
+ * It reads the refresh token from localStorage and exchanges it for a new access token.
+ * 
+ * SECURITY RISKS & MITIGATIONS:
+ * 
+ * 1. Refresh Token Theft (localStorage → XSS)
+ *    Risk: If XSS occurs, attacker can steal refresh token (7-day validity)
+ *    Status: Partially addressed by CSP headers, but full mitigation requires httpOnly cookies
+ *    Action: Use httpOnly secure cookies in production
+ * 
+ * 2. Token Leakage in Logs
+ *    Risk: Full tokens could appear in error logs if not careful
+ *    Status: This implementation does NOT log full tokens
+ *    Action: Maintain this practice; use token ID or user ID instead
+ * 
+ * 3. Silent Token Refresh Loop
+ *    Risk: If refresh endpoint is broken, this could create infinite loop
+ *    Status: Error handling stops loop and redirects to login
+ *    Action: Monitor for excessive refresh token errors
+ * 
+ * PRODUCTION IMPROVEMENTS:
+ * - Migrate to httpOnly + Secure cookies for token storage
+ * - Implement token rotation (new refresh token on each refresh)
+ * - Add max refresh attempts before forcing re-login
+ * - Use request signing/fingerprinting to detect token reuse
+ * - Implement refresh token revocation on logout
+ */
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
 const client: AxiosInstance = axios.create({
@@ -53,3 +84,4 @@ client.interceptors.response.use(
 )
 
 export default client
+

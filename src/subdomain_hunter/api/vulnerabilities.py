@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from subdomain_hunter.db import get_db
 from subdomain_hunter.auth_utils import get_current_user
+from subdomain_hunter.audit import log_audit_event, AuditEvent
 from subdomain_hunter.models import Vulnerability, VulnerabilityUpdate, VulnerabilityResponse
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,18 @@ def update_vulnerability(
     db.add(vuln)
     db.commit()
     db.refresh(vuln)
+    
+    log_audit_event(
+        AuditEvent.VULNERABILITY_UPDATED,
+        user=current_user['sub'],
+        resource_type="vulnerability",
+        resource_id=vuln_id,
+        details={
+            "is_false_positive": update.is_false_positive,
+            "reason": update.false_positive_reason
+        }
+    )
+    
     return vuln
 
 
@@ -90,6 +103,14 @@ def delete_vulnerability(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Vulnerability with id {vuln_id} not found",
         )
+    
+    log_audit_event(
+        AuditEvent.VULNERABILITY_DELETED,
+        user=current_user['sub'],
+        resource_type="vulnerability",
+        resource_id=vuln_id,
+        details={"vulnerability_type": getattr(vuln, 'vulnerability_type', 'unknown')}
+    )
     
     db.delete(vuln)
     db.commit()

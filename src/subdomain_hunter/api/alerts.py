@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from subdomain_hunter.db import get_db
 from subdomain_hunter.auth_utils import get_current_user
+from subdomain_hunter.audit import log_audit_event, AuditEvent
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
