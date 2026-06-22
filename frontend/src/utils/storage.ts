@@ -1,3 +1,5 @@
+import type { User } from '@/types'
+
 export const getStoredToken = (): string | null => {
   return localStorage.getItem('access_token')
 }
@@ -17,12 +19,12 @@ export const clearTokens = (): void => {
   localStorage.removeItem('user')
 }
 
-export const getStoredUser = (): any => {
+export const getStoredUser = (): User | null => {
   const user = localStorage.getItem('user')
-  return user ? JSON.parse(user) : null
+  return user ? JSON.parse(user) as User : null
 }
 
-export const setStoredUser = (user: any): void => {
+export const setStoredUser = (user: User): void => {
   localStorage.setItem('user', JSON.stringify(user))
 }
 

@@ -26,7 +26,9 @@ import { formatDate } from '@/utils/formatters'
 import { alertAPI, type Alert as AlertType } from '@/api/alerts'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 
-const getSeverityColor = (severity: string) => {
+type SeverityColor = 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'
+
+const getSeverityColor = (severity: string): SeverityColor => {
   switch (severity) {
     case 'critical':
       return 'error'
@@ -77,7 +79,7 @@ export const AlertsPage: React.FC = () => {
     setSelectedAlert(null)
   }
 
-  const handleResolveAlert = async (alertId: number) => {
+  const handleResolveAlert = async (alertId: number): Promise<void> => {
     try {
       await alertAPI.resolve(alertId)
       setAlerts(
@@ -93,7 +95,7 @@ export const AlertsPage: React.FC = () => {
     }
   }
 
-  const exportAsJSON = () => {
+  const exportAsJSON = (): void => {
     const data = {
       alerts,
       activeCount: activeAlerts.length,
@@ -112,7 +114,7 @@ export const AlertsPage: React.FC = () => {
     setExportAnchor(null)
   }
 
-  const exportAsCSV = () => {
+  const exportAsCSV = (): void => {
     const csv = [
       ['Security Alerts'],
       ['Domain', 'Alert Type', 'Severity', 'Status', 'Created At', 'Resolved At'],
@@ -213,7 +215,7 @@ export const AlertsPage: React.FC = () => {
                       <TableCell>
                         <Chip
                           label={alert.severity.toUpperCase()}
-                          color={getSeverityColor(alert.severity) as any}
+                          color={getSeverityColor(alert.severity)}
                           size="small"
                         />
                       </TableCell>
@@ -267,7 +269,7 @@ export const AlertsPage: React.FC = () => {
                       <TableCell>
                         <Chip
                           label={alert.severity.toUpperCase()}
-                          color={getSeverityColor(alert.severity) as any}
+                          color={getSeverityColor(alert.severity)}
                           size="small"
                         />
                       </TableCell>
@@ -306,7 +308,7 @@ export const AlertsPage: React.FC = () => {
                 <Box sx={{ mb: 2 }}>
                   <Chip
                     label={selectedAlert.severity.toUpperCase()}
-                    color={getSeverityColor(selectedAlert.severity) as any}
+                    color={getSeverityColor(selectedAlert.severity)}
                   />
                 </Box>
 

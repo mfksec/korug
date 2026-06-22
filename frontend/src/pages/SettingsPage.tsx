@@ -20,7 +20,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -77,7 +76,7 @@ export const SettingsPage: React.FC = () => {
     fetchData()
   }, [])
 
-  const handleSettingChange = (key: keyof UserSettings, value: any) => {
+  const handleSettingChange = (key: keyof UserSettings, value: string | boolean): void => {
     setSettings(prev => ({ ...prev, [key]: value }))
   }
 
@@ -114,20 +113,7 @@ export const SettingsPage: React.FC = () => {
     }
   }
 
-  const handleDeleteApiKey = async (keyId: number) => {
-    if (window.confirm('Are you sure you want to delete this API key?')) {
-      try {
-        await settingsAPI.deleteApiKey(keyId)
-        setApiKeys(prev => prev.filter(k => k.id !== keyId))
-        setSuccess('API key deleted successfully!')
-        setTimeout(() => setSuccess(null), 3000)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to delete API key')
-      }
-    }
-  }
-
-  const handleRevokeApiKey = async (keyId: number) => {
+  const handleRevokeApiKey = async (keyId: number): Promise<void> => {
     try {
       const updated = await settingsAPI.revokeApiKey(keyId)
       setApiKeys(prev => prev.map(k => (k.id === keyId ? updated : k)))
