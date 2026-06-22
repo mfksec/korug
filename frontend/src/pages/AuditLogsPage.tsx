@@ -12,7 +12,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Chip,
   CircularProgress,
   Alert,
@@ -39,8 +38,8 @@ export const AuditLogsPage: React.FC = () => {
         setLoading(true)
         setError(null)
         const [logsData, statsData] = await Promise.all([
-          settingsAPI.listAuditLogs(100),
-          settingsAPI.getAuditStats(),
+          settingsAPI.listAuditLogs(100) as Promise<AuditLog[]>,
+          settingsAPI.getAuditStats() as Promise<AuditStats>,
         ])
         setAuditLogs(logsData)
         setStats(statsData)
@@ -54,7 +53,9 @@ export const AuditLogsPage: React.FC = () => {
     fetchData()
   }, [])
 
-  const getActionColor = (action: string) => {
+  type ColorVariant = 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'
+  
+  const getActionColor = (action: string): ColorVariant => {
     switch (action) {
       case 'login':
       case 'logout':
@@ -73,7 +74,7 @@ export const AuditLogsPage: React.FC = () => {
     }
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): ColorVariant => {
     return status === 'success' ? 'success' : 'error'
   }
 
@@ -167,7 +168,7 @@ export const AuditLogsPage: React.FC = () => {
                   <Chip
                     key={action}
                     label={`${action}: ${count}`}
-                    color={getActionColor(action) as any}
+                    color={getActionColor(action)}
                     variant="outlined"
                   />
                 ))}
@@ -221,7 +222,7 @@ export const AuditLogsPage: React.FC = () => {
                         <TableCell>
                           <Chip
                             label={log.action.replace(/_/g, ' ')}
-                            color={getActionColor(log.action) as any}
+                            color={getActionColor(log.action)}
                             size="small"
                           />
                         </TableCell>
@@ -232,7 +233,7 @@ export const AuditLogsPage: React.FC = () => {
                         <TableCell>
                           <Chip
                             label={log.status}
-                            color={getStatusColor(log.status) as any}
+                            color={getStatusColor(log.status)}
                             size="small"
                           />
                         </TableCell>

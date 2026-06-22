@@ -22,9 +22,11 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as any
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true
+    const originalRequest = error.config as (typeof error.config & { _retry?: boolean })
+    if (error.response?.status === 401 && !originalRequest?._retry) {
+      if (originalRequest) {
+        originalRequest._retry = true
+      }
       try {
         const refresh_token = localStorage.getItem('refresh_token')
         if (!refresh_token) {
@@ -38,7 +40,7 @@ client.interceptors.response.use(
         const { access_token } = response.data
         localStorage.setItem('access_token', access_token)
         client.defaults.headers.common['Authorization'] = `Bearer ${access_token}`
-        return client(originalRequest)
+        return client(originalRequest!)
       } catch (refreshError) {
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')

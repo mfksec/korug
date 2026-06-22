@@ -13,8 +13,8 @@ export const useDomains = () => {
     try {
       const data = await domainAPI.list()
       setDomains(data)
-    } catch (err: any) {
-      const message = err.response?.data?.detail || 'Failed to fetch domains'
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch domains'
       setError(message)
     } finally {
       setIsLoading(false)
@@ -27,20 +27,20 @@ export const useDomains = () => {
       const newDomain = await domainAPI.create(domain_name)
       setDomains((prev) => [...prev, newDomain])
       return newDomain
-    } catch (err: any) {
-      const message = err.response?.data?.detail || 'Failed to add domain'
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to add domain'
       setError(message)
       throw err
     }
   }, [])
 
-  const deleteDomain = useCallback(async (id: number) => {
+  const deleteDomain = useCallback(async (id: number): Promise<void> => {
     setError(null)
     try {
       await domainAPI.delete(id)
       setDomains((prev) => prev.filter((d) => d.id !== id))
-    } catch (err: any) {
-      const message = err.response?.data?.detail || 'Failed to delete domain'
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete domain'
       setError(message)
       throw err
     }
@@ -54,8 +54,8 @@ export const useDomains = () => {
         prev.map((d) => (d.id === id ? updated : d))
       )
       return updated
-    } catch (err: any) {
-      const message = err.response?.data?.detail || 'Failed to update domain'
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update domain'
       setError(message)
       throw err
     }
