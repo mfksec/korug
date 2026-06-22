@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Subfinder
-RUN curl -L https://github.com/projectdiscovery/subfinder/releases/download/v2.14.0/subfinder_2.14.0_linux_amd64.zip -o subfinder.zip && \
+RUN curl -fsSL --retry 3 --retry-delay 2 https://github.com/projectdiscovery/subfinder/releases/download/v2.14.0/subfinder_2.14.0_linux_amd64.zip -o subfinder.zip && \
     unzip subfinder.zip && \
     mv subfinder /usr/local/bin/ && \
     chmod +x /usr/local/bin/subfinder && \
