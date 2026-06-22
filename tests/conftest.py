@@ -56,12 +56,17 @@ def client(db_session):
     from fastapi.testclient import TestClient
     from subdomain_hunter.auth_utils import create_access_token
     from subdomain_hunter.main import app
-    
+    import subdomain_hunter.token_blacklist as token_blacklist_module
+
     # Override get_db dependency
     def override_get_db():
         return db_session
     
     app.dependency_overrides[get_db] = override_get_db
+
+    # Clear the token blacklist before each test to prevent state bleed
+    with token_blacklist_module._lock:
+        token_blacklist_module._blacklist.clear()
     
     client = TestClient(app)
     token = create_access_token({"sub": "test-user"})

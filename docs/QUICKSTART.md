@@ -59,7 +59,7 @@ docker exec subdomain_hunter_app python -m subdomain_hunter.cli add-domain examp
 docker-compose -f docker/docker-compose.yml ps
 
 # View logs
-docker-compose -f docker/docker-compose.yml logs -f subdomain_hunter_api
+docker-compose -f docker/docker-compose.yml logs -f subdomain-hunter-api
 
 # Stop services
 docker-compose -f docker/docker-compose.yml down
@@ -68,7 +68,7 @@ docker-compose -f docker/docker-compose.yml down
 docker-compose -f docker/docker-compose.yml down -v
 
 # Restart a service
-docker-compose -f docker/docker-compose.yml restart subdomain_hunter_api
+docker-compose -f docker/docker-compose.yml restart subdomain-hunter-api
 ```
 
 ---
@@ -189,7 +189,7 @@ Once everything is running, follow these steps:
 docker-compose -f docker/docker-compose.yml ps
 
 # View API logs
-docker-compose -f docker/docker-compose.yml logs subdomain_hunter_api
+docker-compose -f docker/docker-compose.yml logs subdomain-hunter-api
 ```
 
 **Error: "Database connection failed"**

@@ -1,6 +1,6 @@
 """Token blacklist/revocation system for logout and security."""
-from datetime import datetime, timedelta
-from typing import Dict, Optional
+from datetime import datetime, timezone
+from typing import Dict
 import threading
 
 # Thread-safe in-memory token blacklist
@@ -36,7 +36,7 @@ def is_blacklisted(token: str) -> bool:
         
         # Check if blacklist entry has expired (cleanup)
         expiration = _blacklist[token]
-        if datetime.utcnow().timestamp() > expiration:
+        if datetime.now(timezone.utc).timestamp() > expiration:
             del _blacklist[token]
             return False
         
@@ -50,7 +50,7 @@ def cleanup_expired_tokens() -> int:
         Number of tokens cleaned up
     """
     with _lock:
-        now = datetime.utcnow().timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         expired = [token for token, exp_time in _blacklist.items() if now > exp_time]
         
         for token in expired:
@@ -66,7 +66,7 @@ def get_blacklist_stats() -> Dict[str, int]:
         Dictionary with blacklist size and expired count
     """
     with _lock:
-        now = datetime.utcnow().timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         expired_count = sum(1 for exp_time in _blacklist.values() if now > exp_time)
         return {
             "total_blacklisted": len(_blacklist),

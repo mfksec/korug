@@ -12,6 +12,10 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Accept build-time API URL (Vite reads this during build)
+ARG VITE_API_BASE_URL=http://localhost:8000
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 # Build the application
 RUN npm run build
 
@@ -25,9 +29,6 @@ RUN npm install -g serve
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
-
-# Set environment variable
-ENV VITE_API_BASE_URL=http://localhost:8000
 
 EXPOSE 3000
 
