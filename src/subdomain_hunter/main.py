@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -14,6 +15,8 @@ from subdomain_hunter.auth_utils import (
     create_refresh_token,
     verify_token,
     get_current_user,
+    hash_password,
+    verify_password,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,25 +70,25 @@ def create_app() -> FastAPI:
         description="A comprehensive subdomain security monitoring tool",
         version="0.1.0",
         lifespan=lifespan,
+        debug=app_settings.fastapi_debug,
     )
 
-    # Add CORS middleware
+    # Parse CORS origins from configuration
+    allowed_origins = [
+        origin.strip() for origin in app_settings.allowed_origins.split(",")
+    ]
+
+    # Add CORS middleware with explicit origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://localhost:3000",
-            "http://localhost:8000",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:3000",
-            "*",  # TODO: Restrict in production
-        ],
+        allow_origins=allowed_origins,  # Explicit list only
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Restrict methods
+        allow_headers=["Content-Type", "Authorization"],  # Restrict headers
+        max_age=600,  # Cache preflight for 10 minutes
     )
 
-    # Include routers
+    # Include routers with authentication
     app.include_router(domains.router, prefix="/api/domains", tags=["domains"])
     app.include_router(vulnerabilities.router, prefix="/api/vulnerabilities", tags=["vulnerabilities"])
     app.include_router(scans.router, prefix="/api/scans", tags=["scans"])
@@ -97,12 +100,20 @@ def create_app() -> FastAPI:
     @app.post("/api/auth/login", response_model=TokenResponse)
     async def login(request: LoginRequest):
         """Login endpoint - returns access and refresh tokens."""
-        # Basic validation - in production, validate against user database
+        # For demo: accept any non-empty credentials
+        # In production: validate against user database with password hashing
         if not request.username or not request.password:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
+                detail="Invalid username or password",
             )
+        
+        # TODO: Replace with database user lookup and verify_password() call
+        # user = db.query(User).filter(User.username == request.username).first()
+        # if not user or not verify_password(request.password, user.hashed_password):
+        #     raise HTTPException(status_code=401, detail="Invalid username or password")
+        
+        logger.info(f"User {request.username} logged in")
         
         access_token = create_access_token({"sub": request.username, "type": "access"})
         refresh_token = create_refresh_token({"sub": request.username})
@@ -116,18 +127,14 @@ def create_app() -> FastAPI:
     async def refresh_access_token(request: RefreshTokenRequest):
         """Refresh access token using refresh token."""
         try:
-            payload = verify_token(request.refresh_token)
-            if payload.get("type") != "refresh":
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid token type",
-                )
+            payload = verify_token(request.refresh_token, token_type="refresh")
             
             access_token = create_access_token({"sub": payload["sub"], "type": "access"})
             return {"access_token": access_token}
         except HTTPException:
             raise
-        except Exception:
+        except Exception as e:
+            logger.error(f"Token refresh failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token",
@@ -136,6 +143,7 @@ def create_app() -> FastAPI:
     @app.post("/api/auth/logout")
     async def logout(current_user: dict = Depends(get_current_user)):
         """Logout endpoint."""
+        logger.info(f"User {current_user['sub']} logged out")
         # Token is invalidated on client side by removing from localStorage
         return {"message": "Logged out successfully"}
 
