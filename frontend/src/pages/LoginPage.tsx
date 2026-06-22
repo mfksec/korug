@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Box,
   Container,
@@ -14,8 +15,9 @@ interface LoginPageProps {
   onLoginSuccess: () => void
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+export const LoginPage: React.FC<LoginPageProps> = () => {
   const { login, isLoading, error } = useAuth()
+  const navigate = useNavigate()
   const [username, setUsername] = useState('admin')
   const [password, setPassword] = useState('password')
 
@@ -23,7 +25,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     e.preventDefault()
     const success = await login({ username, password })
     if (success) {
-      onLoginSuccess()
+      navigate('/dashboard')
     }
   }
 
