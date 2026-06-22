@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from subdomain_hunter.config import get_settings
 from subdomain_hunter.db import init_db
-from subdomain_hunter.api import domains, vulnerabilities, scans, export
+from subdomain_hunter.api import domains, vulnerabilities, scans, export, alerts, settings
 from subdomain_hunter.auth_utils import (
     create_access_token,
     create_refresh_token,
@@ -17,7 +17,7 @@ from subdomain_hunter.auth_utils import (
 )
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
+app_settings = get_settings()
 
 
 # Request/Response Models for Auth
@@ -90,6 +90,8 @@ def create_app() -> FastAPI:
     app.include_router(vulnerabilities.router, prefix="/api/vulnerabilities", tags=["vulnerabilities"])
     app.include_router(scans.router, prefix="/api/scans", tags=["scans"])
     app.include_router(export.router, prefix="/api/export", tags=["export"])
+    app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
+    app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
     # Authentication endpoints
     @app.post("/api/auth/login", response_model=TokenResponse)
