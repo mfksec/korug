@@ -21,7 +21,6 @@ import {
   Menu,
   MenuItem,
 } from '@mui/material'
-import { Navbar } from '@/components/common/Navbar'
 import { formatDate } from '@/utils/formatters'
 import { alertAPI, type Alert as AlertType } from '@/api/alerts'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
@@ -148,7 +147,6 @@ export const AlertsPage: React.FC = () => {
   if (loading) {
     return (
       <Box>
-        <Navbar />
         <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '500px' }}>
           <CircularProgress />
         </Container>
@@ -158,7 +156,6 @@ export const AlertsPage: React.FC = () => {
 
   return (
     <Box>
-      <Navbar />
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
@@ -197,7 +194,7 @@ export const AlertsPage: React.FC = () => {
           </Typography>
           <TableContainer component={Paper}>
             <Table>
-              <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+              <TableHead sx={{ bgcolor: 'action.hover' }}>
                 <TableRow>
                   <TableCell>Domain</TableCell>
                   <TableCell>Alert Type</TableCell>
@@ -253,7 +250,7 @@ export const AlertsPage: React.FC = () => {
             </Typography>
             <TableContainer component={Paper}>
               <Table>
-                <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
                   <TableRow>
                     <TableCell>Domain</TableCell>
                     <TableCell>Alert Type</TableCell>

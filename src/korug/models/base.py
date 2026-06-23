@@ -179,6 +179,26 @@ class UserSetting(Base):
         return f"<UserSetting(id={self.id}, user_id={self.user_id})>"
 
 
+class IntegrationConfig(Base):
+    """IntegrationConfig model - persisted config for an external integration.
+
+    One row per provider (e.g. "slack", "email"). Settings are stored as a JSON
+    blob so each provider can keep its own shape; secrets live in the same blob
+    and are masked on read by the API layer.
+    """
+    __tablename__ = "integration_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String(50), unique=True, nullable=False, index=True)
+    enabled = Column(Boolean, default=False, nullable=False)
+    config = Column(Text, nullable=True)  # JSON-encoded provider settings
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(String(255), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<IntegrationConfig(provider={self.provider}, enabled={self.enabled})>"
+
+
 class AuditLog(Base):
     """AuditLog model - persistent record of security audit events."""
     __tablename__ = "audit_logs"

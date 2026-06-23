@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Container, Box, Tabs, Tab, Typography, CircularProgress, Alert, Button, Menu, MenuItem } from '@mui/material'
-import { Navbar } from '@/components/common/Navbar'
+import { alpha, useTheme } from '@mui/material/styles'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { vulnerabilityAPI } from '@/api/vulnerabilities'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
@@ -43,6 +43,20 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 export const VulnerabilitiesPage: React.FC = () => {
+  const theme = useTheme()
+  // Theme-aware tokens for recharts (which otherwise hardcodes light-mode grays)
+  const axisColor = theme.palette.text.secondary
+  const gridColor = theme.palette.divider
+  const chartColor = theme.palette.primary.main
+  const axisTick = { fill: axisColor, fontSize: 12 }
+  const tooltipStyle = {
+    backgroundColor: theme.palette.background.paper,
+    border: `1px solid ${theme.palette.divider}`,
+    borderRadius: 8,
+    color: theme.palette.text.primary,
+  }
+  const legendStyle = { color: axisColor }
+
   const [tabValue, setTabValue] = useState(0)
   const [trendData, setTrendData] = useState<TimelineData[]>([])
   const [typeData, setTypeData] = useState<TypeData[]>([])
@@ -144,7 +158,6 @@ export const VulnerabilitiesPage: React.FC = () => {
   if (loading) {
     return (
       <Box>
-        <Navbar />
         <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '500px' }}>
           <CircularProgress />
         </Container>
@@ -154,7 +167,6 @@ export const VulnerabilitiesPage: React.FC = () => {
 
   return (
     <Box>
-      <Navbar />
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
@@ -192,22 +204,24 @@ export const VulnerabilitiesPage: React.FC = () => {
 
         {/* 30-Day Trend Chart */}
         {tabValue === 0 && (
-          <Box sx={{ bgcolor: '#fff', p: 3, borderRadius: 2, boxShadow: 1 }}>
+          <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               Vulnerabilities Discovered (Last 30 Days)
             </Typography>
             <ResponsiveContainer width="100%" height={400}>
               <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <XAxis dataKey="date" tick={axisTick} stroke={gridColor} />
+                <YAxis tick={axisTick} stroke={gridColor} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: gridColor }} />
+                <Legend wrapperStyle={legendStyle} />
                 <Line
                   type="monotone"
                   dataKey="count"
-                  stroke="#1976d2"
+                  stroke={chartColor}
                   strokeWidth={2}
+                  dot={{ fill: chartColor }}
+                  activeDot={{ r: 5 }}
                   name="Vulnerabilities Found"
                 />
               </LineChart>
@@ -217,7 +231,7 @@ export const VulnerabilitiesPage: React.FC = () => {
 
         {/* Vulnerability Type Distribution */}
         {tabValue === 1 && (
-          <Box sx={{ bgcolor: '#fff', p: 3, borderRadius: 2, boxShadow: 1 }}>
+          <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               Vulnerabilities by Type
             </Typography>
@@ -238,7 +252,7 @@ export const VulnerabilitiesPage: React.FC = () => {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip contentStyle={tooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -249,19 +263,19 @@ export const VulnerabilitiesPage: React.FC = () => {
 
         {/* Confidence Score Distribution */}
         {tabValue === 2 && (
-          <Box sx={{ bgcolor: '#fff', p: 3, borderRadius: 2, boxShadow: 1 }}>
+          <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               Vulnerabilities by Confidence Score
             </Typography>
             {confidenceData.length > 0 ? (
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={confidenceData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="severity" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="count" fill="#1976d2" name="Count" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="severity" tick={axisTick} stroke={gridColor} />
+                  <YAxis tick={axisTick} stroke={gridColor} allowDecimals={false} />
+                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: alpha(chartColor, 0.08) }} />
+                  <Legend wrapperStyle={legendStyle} />
+                  <Bar dataKey="count" fill={chartColor} name="Count" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -272,34 +286,34 @@ export const VulnerabilitiesPage: React.FC = () => {
 
         {/* Statistics */}
         {tabValue === 3 && stats && (
-          <Box sx={{ bgcolor: '#fff', p: 3, borderRadius: 2, boxShadow: 1 }}>
+          <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               Summary Statistics
             </Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
-              <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                <Typography variant="body2" color="textSecondary">
+              <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+                <Typography variant="body2" color="text.secondary">
                   Total Vulnerabilities
                 </Typography>
                 <Typography variant="h4">{stats.total}</Typography>
               </Box>
-              <Box sx={{ p: 2, bgcolor: '#ffebee', borderRadius: 1 }}>
-                <Typography variant="body2" color="textSecondary">
+              <Box sx={{ p: 2, borderRadius: 2, bgcolor: (t) => alpha(t.palette.error.main, t.palette.mode === 'dark' ? 0.18 : 0.1) }}>
+                <Typography variant="body2" color="text.secondary">
                   Critical Severity
                 </Typography>
-                <Typography variant="h4">{stats.critical}</Typography>
+                <Typography variant="h4" color="error.main">{stats.critical}</Typography>
               </Box>
-              <Box sx={{ p: 2, bgcolor: '#fff3e0', borderRadius: 1 }}>
-                <Typography variant="body2" color="textSecondary">
+              <Box sx={{ p: 2, borderRadius: 2, bgcolor: (t) => alpha(t.palette.warning.main, t.palette.mode === 'dark' ? 0.18 : 0.12) }}>
+                <Typography variant="body2" color="text.secondary">
                   High Severity
                 </Typography>
-                <Typography variant="h4">{stats.high}</Typography>
+                <Typography variant="h4" color="warning.main">{stats.high}</Typography>
               </Box>
-              <Box sx={{ p: 2, bgcolor: '#e3f2fd', borderRadius: 1 }}>
-                <Typography variant="body2" color="textSecondary">
+              <Box sx={{ p: 2, borderRadius: 2, bgcolor: (t) => alpha(t.palette.info.main, t.palette.mode === 'dark' ? 0.18 : 0.12) }}>
+                <Typography variant="body2" color="text.secondary">
                   Average Confidence
                 </Typography>
-                <Typography variant="h4">{stats.avg_confidence.toFixed(1)}%</Typography>
+                <Typography variant="h4" color="info.main">{stats.avg_confidence.toFixed(1)}%</Typography>
               </Box>
             </Box>
           </Box>

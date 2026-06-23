@@ -21,7 +21,6 @@ import {
   FormControl,
   InputLabel,
 } from '@mui/material'
-import { Navbar } from '@/components/common/Navbar'
 import { settingsAPI, type AuditLog, type AuditStats } from '@/api/settings'
 import { formatDate } from '@/utils/formatters'
 
@@ -88,7 +87,6 @@ export const AuditLogsPage: React.FC = () => {
   if (loading) {
     return (
       <Box>
-        <Navbar />
         <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '500px' }}>
           <CircularProgress />
         </Container>
@@ -98,7 +96,6 @@ export const AuditLogsPage: React.FC = () => {
 
   return (
     <Box>
-      <Navbar />
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Typography variant="h4" sx={{ mb: 4, fontWeight: 'bold' }}>
           Audit Logs
@@ -202,7 +199,7 @@ export const AuditLogsPage: React.FC = () => {
 
             <TableContainer>
               <Table>
-                <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
                   <TableRow>
                     <TableCell>Timestamp</TableCell>
                     <TableCell>Action</TableCell>

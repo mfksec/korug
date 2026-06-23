@@ -25,6 +25,52 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+class UserAdminUpdate(BaseModel):
+    """Fields an admin may change on another user."""
+    email: Optional[str] = Field(default=None, min_length=3, max_length=255)
+    role: Optional[str] = Field(default=None, max_length=32)
+    is_active: Optional[bool] = None
+
+
+class ProfileUpdate(BaseModel):
+    """Fields a user may change on their own profile."""
+    email: str = Field(..., min_length=3, max_length=255)
+
+
+class PasswordChange(BaseModel):
+    """Self-service password change (requires current password)."""
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class PasswordReset(BaseModel):
+    """Admin-initiated password reset for another user."""
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+# Integration Schemas
+class SlackConfig(BaseModel):
+    enabled: bool = False
+    webhook_url: Optional[str] = None
+
+
+class EmailConfig(BaseModel):
+    enabled: bool = False
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    use_tls: bool = True
+    from_address: Optional[str] = None
+    to_addresses: Optional[str] = None  # comma-separated recipients
+
+
+class IntegrationTestRequest(BaseModel):
+    """Optional override config to validate before saving (else use stored)."""
+    slack: Optional[SlackConfig] = None
+    email: Optional[EmailConfig] = None
+
+
 # Domain Schemas
 class DomainCreate(BaseModel):
     domain_name: str = Field(..., min_length=1, max_length=255)

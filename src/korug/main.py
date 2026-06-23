@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from korug.config import get_settings
 from korug.db import init_db, get_db, SessionLocal
 from korug.audit import setup_audit_logger, log_audit_event, AuditEvent
-from korug.api import domains, vulnerabilities, scans, export, alerts, settings
+from korug.api import domains, vulnerabilities, scans, export, alerts, settings, users, integrations
 from korug.auth_utils import (
     create_access_token,
     create_refresh_token,
@@ -174,6 +174,8 @@ def create_app() -> FastAPI:
     app.include_router(export.router, prefix="/api/export", tags=["export"])
     app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
     app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+    app.include_router(users.router, prefix="/api/users", tags=["users"])
+    app.include_router(integrations.router, prefix="/api/integrations", tags=["integrations"])
 
     # Authentication endpoints
     @app.post("/api/auth/login", response_model=TokenResponse)

@@ -30,13 +30,15 @@ import {
   Tooltip,
   Grid,
 } from '@mui/material'
-import { Navbar } from '@/components/common/Navbar'
 import { settingsAPI, type UserSettings, type APIKey } from '@/api/settings'
+import { useColorMode } from '@/contexts/ColorModeContext'
+import { PaletteMode } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import AddIcon from '@mui/icons-material/Add'
 
 export const SettingsPage: React.FC = () => {
+  const { mode, setMode } = useColorMode()
   const [settings, setSettings] = useState<UserSettings>({
     theme: 'light',
     notifications_enabled: true,
@@ -66,6 +68,10 @@ export const SettingsPage: React.FC = () => {
         ])
         setSettings(settingsData.settings)
         setApiKeys(keysData)
+        // Honor the saved appearance preference (syncs across devices).
+        if (settingsData.settings.theme === 'light' || settingsData.settings.theme === 'dark') {
+          setMode(settingsData.settings.theme)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load settings')
       } finally {
@@ -84,7 +90,8 @@ export const SettingsPage: React.FC = () => {
     try {
       setSaving(true)
       setError(null)
-      await settingsAPI.updateSettings(settings)
+      // Persist the live appearance choice along with the other preferences.
+      await settingsAPI.updateSettings({ ...settings, theme: mode })
       setSuccess('Settings saved successfully!')
       setTimeout(() => setSuccess(null), 3000)
     } catch (err) {
@@ -133,7 +140,6 @@ export const SettingsPage: React.FC = () => {
   if (loading) {
     return (
       <Box>
-        <Navbar />
         <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '500px' }}>
           <CircularProgress />
         </Container>
@@ -143,7 +149,6 @@ export const SettingsPage: React.FC = () => {
 
   return (
     <Box>
-      <Navbar />
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Typography variant="h4" sx={{ mb: 4, fontWeight: 'bold' }}>
           Settings
@@ -195,11 +200,13 @@ export const SettingsPage: React.FC = () => {
                   <FormControl fullWidth>
                     <InputLabel>Theme</InputLabel>
                     <Select
-                      value={settings.theme}
+                      value={mode}
                       label="Theme"
-                      onChange={(e) =>
-                        handleSettingChange('theme', e.target.value)
-                      }
+                      onChange={(e) => {
+                        const next = e.target.value as PaletteMode
+                        setMode(next)  // applies instantly, same as the top-bar toggle
+                        handleSettingChange('theme', next)
+                      }}
                     >
                       <MenuItem value="light">Light</MenuItem>
                       <MenuItem value="dark">Dark</MenuItem>
@@ -267,7 +274,7 @@ export const SettingsPage: React.FC = () => {
                 <TableContainer>
                   <Table size="small">
                     <TableHead>
-                      <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                      <TableRow sx={{ bgcolor: 'action.hover' }}>
                         <TableCell>Name</TableCell>
                         <TableCell>Created</TableCell>
                         <TableCell>Status</TableCell>
@@ -358,7 +365,7 @@ export const SettingsPage: React.FC = () => {
                     variant="body2"
                     sx={{
                       fontFamily: 'monospace',
-                      bgcolor: '#f5f5f5',
+                      bgcolor: 'action.hover',
                       p: 1,
                       borderRadius: 1,
                       wordBreak: 'break-all',
