@@ -8,8 +8,9 @@ import click
 from sqlalchemy.orm import Session
 
 from subdomain_hunter import get_settings, get_db, init_db
-from subdomain_hunter.models import Domain, Subdomain, Vulnerability
+from subdomain_hunter.models import Domain, Subdomain, Vulnerability, User
 from subdomain_hunter.services import discovery_service, takeover_detector
+from subdomain_hunter.users import create_user, get_user_by_username, authenticate_user
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -219,6 +220,140 @@ def init_database():
         click.echo("✅ Database initialized successfully")
     except Exception as e:
         click.echo(f"❌ Error initializing database: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# User Management Commands
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@cli.command("create-user")
+@click.option("--username", prompt="Username", help="Username for the new user")
+@click.option("--email", prompt="Email", help="Email for the new user")
+@click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True, help="Password for the new user")
+@click.option("--role", type=click.Choice(["admin", "viewer"], case_sensitive=False), default="viewer", help="User role")
+def create_user_cmd(username: str, email: str, password: str, role: str):
+    """Create a new user account."""
+    db = next(get_db())
+    try:
+        # Validate inputs
+        if not username or len(username) < 3:
+            click.echo("❌ Username must be at least 3 characters")
+            return
+        
+        if not email or "@" not in email:
+            click.echo("❌ Invalid email address")
+            return
+        
+        if not password or len(password) < 8:
+            click.echo("❌ Password must be at least 8 characters")
+            return
+        
+        # Check if user already exists
+        existing_user = get_user_by_username(db, username)
+        if existing_user:
+            click.echo(f"❌ User '{username}' already exists")
+            return
+        
+        # Create the user
+        user = create_user(db, username=username, email=email, password=password, role=role)
+        
+        click.echo("✅ User created successfully:")
+        click.echo(f"   ID: {user.id}")
+        click.echo(f"   Username: {user.username}")
+        click.echo(f"   Email: {user.email}")
+        click.echo(f"   Role: {user.role}")
+        click.echo(f"   Created: {user.created_at}")
+    except ValueError as e:
+        click.echo(f"❌ Error: {e}")
+    except Exception as e:
+        click.echo(f"❌ Error creating user: {e}")
+        logger.exception("User creation error")
+    finally:
+        db.close()
+
+
+@cli.command("list-users")
+def list_users_cmd():
+    """List all user accounts."""
+    db = next(get_db())
+    try:
+        users = db.query(User).all()
+        
+        if not users:
+            click.echo("No users configured")
+            return
+        
+        click.echo("\n👥 User Accounts:")
+        click.echo("-" * 100)
+        click.echo(f"{'ID':<5} {'Username':<20} {'Email':<35} {'Role':<10} {'Active':<8} {'Last Login':<20}")
+        click.echo("-" * 100)
+        
+        for user in users:
+            active = "✅ Yes" if user.is_active else "❌ No"
+            last_login = user.last_login.strftime("%Y-%m-%d %H:%M:%S") if user.last_login else "Never"
+            click.echo(
+                f"{user.id:<5} {user.username:<20} {user.email:<35} {user.role:<10} {active:<8} {last_login:<20}"
+            )
+        
+        click.echo("-" * 100)
+        click.echo(f"Total users: {len(users)}")
+    except Exception as e:
+        click.echo(f"❌ Error listing users: {e}")
+        logger.exception("User listing error")
+    finally:
+        db.close()
+
+
+@cli.command("delete-user")
+@click.option("--username", prompt="Username to delete", help="Username of the user to delete")
+@click.confirmation_option(prompt="Are you sure you want to delete this user?")
+def delete_user_cmd(username: str):
+    """Delete a user account."""
+    db = next(get_db())
+    try:
+        user = get_user_by_username(db, username)
+        if not user:
+            click.echo(f"❌ User '{username}' not found")
+            return
+        
+        db.delete(user)
+        db.commit()
+        click.echo(f"✅ User '{username}' deleted successfully")
+    except Exception as e:
+        click.echo(f"❌ Error deleting user: {e}")
+        logger.exception("User deletion error")
+    finally:
+        db.close()
+
+
+@cli.command("change-password")
+@click.option("--username", prompt="Username", help="Username of the user")
+@click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True, help="New password")
+def change_password_cmd(username: str, password: str):
+    """Change a user's password."""
+    db = next(get_db())
+    try:
+        if not password or len(password) < 8:
+            click.echo("❌ Password must be at least 8 characters")
+            return
+        
+        user = get_user_by_username(db, username)
+        if not user:
+            click.echo(f"❌ User '{username}' not found")
+            return
+        
+        from subdomain_hunter.auth_utils import hash_password
+        
+        user.hashed_password = hash_password(password)
+        db.add(user)
+        db.commit()
+        click.echo(f"✅ Password changed successfully for user '{username}'")
+    except Exception as e:
+        click.echo(f"❌ Error changing password: {e}")
+        logger.exception("Password change error")
+    finally:
+        db.close()
 
 
 def main():

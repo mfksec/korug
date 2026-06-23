@@ -11,13 +11,20 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key-with-32-plus-chars")
 os.environ.setdefault("API_KEY", "test-api-key-with-32-plus-characters")
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3000")
+# Redis: use in-memory fallback for tests (REDIS_URL not set)
+os.environ.pop("REDIS_URL", None)
+# Admin seeding disabled for tests (will create users explicitly)
+os.environ.setdefault("ADMIN_USERNAME", "")
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from datetime import datetime
 
 from subdomain_hunter.models.base import Base
+from subdomain_hunter.models import User
 from subdomain_hunter.db import get_db
+from subdomain_hunter.auth_utils import hash_password, create_access_token, create_refresh_token
 
 # Use in-memory SQLite for testing
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
@@ -51,10 +58,55 @@ def db_session(db_engine):
 
 
 @pytest.fixture
-def client(db_session):
-    """Create test FastAPI client."""
+def test_user(db_session) -> User:
+    """Create a test user for authentication tests."""
+    user = User(
+        username="testuser",
+        email="testuser@example.com",
+        hashed_password=hash_password("testpassword123"),
+        role="admin",
+        is_active=True,
+        created_at=datetime.utcnow(),
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def test_user_viewer(db_session) -> User:
+    """Create a test viewer user for RBAC tests."""
+    user = User(
+        username="vieweruser",
+        email="viewer@example.com",
+        hashed_password=hash_password("viewerpass123"),
+        role="viewer",
+        is_active=True,
+        created_at=datetime.utcnow(),
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def access_token(test_user):
+    """Generate an access token for the test user."""
+    return create_access_token({"sub": test_user.username, "type": "access"})
+
+
+@pytest.fixture
+def refresh_token(test_user):
+    """Generate a refresh token for the test user."""
+    return create_refresh_token({"sub": test_user.username})
+
+
+@pytest.fixture
+def client(db_session, test_user, access_token):
+    """Create test FastAPI client with authentication."""
     from fastapi.testclient import TestClient
-    from subdomain_hunter.auth_utils import create_access_token
     from subdomain_hunter.main import app
     import subdomain_hunter.token_blacklist as token_blacklist_module
 
@@ -69,8 +121,15 @@ def client(db_session):
         token_blacklist_module._blacklist.clear()
     
     client = TestClient(app)
-    token = create_access_token({"sub": "test-user"})
-    client.headers.update({"Authorization": "Bearer " + token})
+    # Add authentication token by default
+    client.headers.update({"Authorization": f"Bearer {access_token}"})
     yield client
     
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def authenticated_client(client, access_token):
+    """Create an authenticated test client with access token (alias for client)."""
+    return client
+

@@ -18,8 +18,8 @@ interface LoginPageProps {
 export const LoginPage: React.FC<LoginPageProps> = () => {
   const { login, isLoading, error } = useAuth()
   const navigate = useNavigate()
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('password')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -86,10 +86,6 @@ export const LoginPage: React.FC<LoginPageProps> = () => {
               {isLoading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
-
-          <Typography variant="caption" sx={{ display: 'block', mt: 3, textAlign: 'center', color: 'textSecondary' }}>
-            Demo credentials: admin / password
-          </Typography>
         </Paper>
       </Container>
     </Box>

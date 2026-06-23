@@ -9,8 +9,12 @@ export interface AuthState {
 
 export interface User {
   id: number
+  username: string
   email: string
-  role: 'admin' | 'user'
+  role: string
+  is_active: boolean
+  created_at: string
+  last_login: string | null
 }
 
 export interface LoginRequest {

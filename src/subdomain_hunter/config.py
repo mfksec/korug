@@ -76,6 +76,19 @@ class Settings(BaseSettings):
     use_httponly_cookies: bool = Field(default=False)  # Enable in production
     cookie_secure: bool = Field(default_factory=lambda: os.environ.get("FASTAPI_ENV", "development") != "development")
 
+    # Redis: shared store for rate limiting + token revocation across workers.
+    # Leave unset for local single-process development (falls back to in-memory).
+    redis_url: Optional[str] = Field(
+        default=None,
+        description="Redis connection string for shared rate-limit/revocation state. Example: redis://redis:6379/0",
+    )
+
+    # Initial admin user, seeded on first startup if no users exist.
+    admin_username: str = Field(default="admin")
+    admin_email: str = Field(default="admin@example.com")
+    # If left unset, a strong random password is generated and logged once on first run.
+    admin_password: Optional[str] = Field(default=None)
+
     @field_validator("database_url", mode="before")
     @classmethod
     def validate_database_url(cls, v):
