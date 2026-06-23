@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Container, Box, Tabs, Tab, Typography, CircularProgress, Alert, Button, Menu, MenuItem } from '@mui/material'
-import { alpha } from '@mui/material/styles'
+import { alpha, useTheme } from '@mui/material/styles'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { vulnerabilityAPI } from '@/api/vulnerabilities'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
@@ -43,6 +43,20 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 export const VulnerabilitiesPage: React.FC = () => {
+  const theme = useTheme()
+  // Theme-aware tokens for recharts (which otherwise hardcodes light-mode grays)
+  const axisColor = theme.palette.text.secondary
+  const gridColor = theme.palette.divider
+  const chartColor = theme.palette.primary.main
+  const axisTick = { fill: axisColor, fontSize: 12 }
+  const tooltipStyle = {
+    backgroundColor: theme.palette.background.paper,
+    border: `1px solid ${theme.palette.divider}`,
+    borderRadius: 8,
+    color: theme.palette.text.primary,
+  }
+  const legendStyle = { color: axisColor }
+
   const [tabValue, setTabValue] = useState(0)
   const [trendData, setTrendData] = useState<TimelineData[]>([])
   const [typeData, setTypeData] = useState<TypeData[]>([])
@@ -196,16 +210,18 @@ export const VulnerabilitiesPage: React.FC = () => {
             </Typography>
             <ResponsiveContainer width="100%" height={400}>
               <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <XAxis dataKey="date" tick={axisTick} stroke={gridColor} />
+                <YAxis tick={axisTick} stroke={gridColor} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: gridColor }} />
+                <Legend wrapperStyle={legendStyle} />
                 <Line
                   type="monotone"
                   dataKey="count"
-                  stroke="#1976d2"
+                  stroke={chartColor}
                   strokeWidth={2}
+                  dot={{ fill: chartColor }}
+                  activeDot={{ r: 5 }}
                   name="Vulnerabilities Found"
                 />
               </LineChart>
@@ -236,7 +252,7 @@ export const VulnerabilitiesPage: React.FC = () => {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip contentStyle={tooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -254,12 +270,12 @@ export const VulnerabilitiesPage: React.FC = () => {
             {confidenceData.length > 0 ? (
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={confidenceData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="severity" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="count" fill="#1976d2" name="Count" />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                  <XAxis dataKey="severity" tick={axisTick} stroke={gridColor} />
+                  <YAxis tick={axisTick} stroke={gridColor} allowDecimals={false} />
+                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: alpha(chartColor, 0.08) }} />
+                  <Legend wrapperStyle={legendStyle} />
+                  <Bar dataKey="count" fill={chartColor} name="Count" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
