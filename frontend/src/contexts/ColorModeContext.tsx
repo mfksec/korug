@@ -6,11 +6,13 @@ import { createAppTheme } from '@/styles/theme'
 interface ColorModeContextValue {
   mode: PaletteMode
   toggle: () => void
+  setMode: (mode: PaletteMode) => void
 }
 
 const ColorModeContext = createContext<ColorModeContextValue>({
   mode: 'light',
   toggle: () => {},
+  setMode: () => {},
 })
 
 const STORAGE_KEY = 'korug-color-mode'
@@ -24,6 +26,11 @@ const getInitialMode = (): PaletteMode => {
 export const ColorModeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [mode, setMode] = useState<PaletteMode>(getInitialMode)
 
+  const setModeExplicit = useCallback((next: PaletteMode) => {
+    localStorage.setItem(STORAGE_KEY, next)
+    setMode(next)
+  }, [])
+
   const toggle = useCallback(() => {
     setMode((prev) => {
       const next = prev === 'light' ? 'dark' : 'light'
@@ -33,7 +40,7 @@ export const ColorModeProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [])
 
   const theme = useMemo(() => createAppTheme(mode), [mode])
-  const value = useMemo(() => ({ mode, toggle }), [mode, toggle])
+  const value = useMemo(() => ({ mode, toggle, setMode: setModeExplicit }), [mode, toggle, setModeExplicit])
 
   return (
     <ColorModeContext.Provider value={value}>
