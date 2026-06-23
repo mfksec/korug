@@ -60,10 +60,26 @@ class Subdomain(Base):
     mx_records = Column(Text, nullable=True)  # JSON array of MX records
     ns_records = Column(Text, nullable=True)  # JSON array of NS records
     
+    # Discovery provenance — comma-separated source names (crt.sh, hackertarget, …)
+    sources = Column(Text, nullable=True)
+
+    # Enrichment (populated during a scan)
+    resolved_ips = Column(Text, nullable=True)        # JSON array of resolved IPs
+    is_alive = Column(Boolean, default=False)         # responded to HTTP(S)
+    status_code = Column(Integer, nullable=True)      # HTTP status from probe
+    final_url = Column(String(512), nullable=True)    # URL after redirects/scheme fallback
+    http_title = Column(String(512), nullable=True)
+    content_length = Column(Integer, nullable=True)
+    web_server = Column(String(255), nullable=True)   # Server header
+    technologies = Column(Text, nullable=True)        # JSON array of detected tech
+    open_ports = Column(Text, nullable=True)          # JSON array of open ports
+    is_cloudflare = Column(Boolean, default=False)    # resolved IP in Cloudflare ranges
+    last_enriched = Column(DateTime, nullable=True)
+
     # Status and timestamps
     first_discovered = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
     domain = relationship("Domain", back_populates="subdomains")
     vulnerabilities = relationship("Vulnerability", back_populates="subdomain", cascade="all, delete-orphan")

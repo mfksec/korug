@@ -1,95 +1,89 @@
-"""Tests for subdomain discovery service."""
+"""Tests for the passive subdomain discovery service."""
+import subprocess
+from unittest.mock import patch, AsyncMock
+
 import pytest
-import json
-from unittest.mock import patch, MagicMock
-from korug.services.discovery import DiscoveryService
+
+from korug.services.discovery import DiscoveryService, _clean
 
 
 @pytest.fixture
-def discovery_service():
-    """Create discovery service instance."""
+def svc():
     return DiscoveryService()
 
 
-@pytest.mark.asyncio
-async def test_discover_subdomains_basic(discovery_service):
-    """Test basic subdomain discovery."""
-    with patch.object(discovery_service, '_run_subfinder') as mock_subfinder, \
-         patch.object(discovery_service, '_run_amass') as mock_amass, \
-         patch.object(discovery_service, '_resolve_subdomains') as mock_resolve:
-        
-        mock_subfinder.return_value = {"www.example.com", "api.example.com"}
-        mock_amass.return_value = {"mail.example.com"}
-        mock_resolve.return_value = {
-            "www.example.com": {"A": ["93.184.216.34"], "AAAA": [], "CNAME": None, "MX": [], "NS": []},
-            "api.example.com": {"A": ["93.184.216.35"], "AAAA": [], "CNAME": None, "MX": [], "NS": []},
-            "mail.example.com": {"A": [], "AAAA": [], "CNAME": None, "MX": ["mail.example.com"], "NS": []},
-        }
-        
-        result = await discovery_service.discover_subdomains("example.com")
-        
-        assert result["domain"] == "example.com"
-        assert result["total_discovered"] == 3
-        assert len(result["subdomains"]) == 3
+# ---- name cleaning -------------------------------------------------------
+
+def test_clean_accepts_subdomain_and_apex():
+    assert _clean("www.example.com", "example.com") == "www.example.com"
+    assert _clean("EXAMPLE.com", "example.com") == "example.com"
 
 
-@pytest.mark.asyncio
-async def test_discover_subdomains_no_results(discovery_service):
-    """Test discovery when no subdomains found."""
-    with patch.object(discovery_service, '_run_subfinder') as mock_subfinder, \
-         patch.object(discovery_service, '_run_amass') as mock_amass, \
-         patch.object(discovery_service, '_resolve_subdomains') as mock_resolve:
-        
-        mock_subfinder.return_value = set()
-        mock_amass.return_value = set()
-        mock_resolve.return_value = {}
-        
-        result = await discovery_service.discover_subdomains("example.com")
-        
-        assert result["domain"] == "example.com"
-        assert result["total_discovered"] == 0
+def test_clean_strips_wildcard_and_trailing_dot():
+    assert _clean("*.example.com.", "example.com") == "example.com"
 
+
+def test_clean_rejects_foreign_and_invalid():
+    assert _clean("other.com", "example.com") is None
+    assert _clean("notexample.com", "example.com") is None   # not a real subdomain
+    assert _clean("foo@example.com", "example.com") is None
+    assert _clean("", "example.com") is None
+
+
+# ---- subfinder error handling (sync helper) ------------------------------
+
+def test_subfinder_timeout_returns_empty(svc):
+    with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("subfinder", 60)):
+        assert svc._run_subfinder("example.com") == set()
+
+
+def test_subfinder_not_found_returns_empty(svc):
+    with patch("subprocess.run", side_effect=FileNotFoundError()):
+        assert svc._run_subfinder("example.com") == set()
+
+
+# ---- discover() aggregation + source attribution -------------------------
 
 @pytest.mark.asyncio
-async def test_subfinder_timeout(discovery_service):
-    """Test Subfinder timeout handling."""
-    import subprocess
-    
-    with patch('subprocess.run') as mock_run:
-        mock_run.side_effect = subprocess.TimeoutExpired("subfinder", 60)
-        
-        result = await discovery_service._run_subfinder("example.com")
-        
-        assert result == set()
+async def test_discover_merges_sources_and_attributes(svc):
+    with patch.object(svc, "_crtsh", AsyncMock(return_value={"www.example.com", "*.example.com"})), \
+         patch.object(svc, "_hackertarget", AsyncMock(return_value={"www.example.com"})), \
+         patch.object(svc, "_certspotter", AsyncMock(return_value={"api.example.com"})), \
+         patch.object(svc, "_rapiddns", AsyncMock(return_value=set())), \
+         patch.object(svc, "_alienvault", AsyncMock(return_value=set())), \
+         patch.object(svc, "_threatminer", AsyncMock(return_value=set())), \
+         patch.object(svc, "_wayback", AsyncMock(return_value={"other.com"})), \
+         patch.object(svc, "_bufferover", AsyncMock(return_value=set())), \
+         patch.object(svc, "_threatcrowd", AsyncMock(return_value=set())), \
+         patch.object(svc, "_run_subfinder", return_value={"mail.example.com"}), \
+         patch.object(svc, "_run_amass", return_value=set()):
+
+        found = await svc.discover("example.com")
+
+    # foreign domain dropped, wildcard normalised to apex, apex seeded
+    assert "other.com" not in found
+    assert found["www.example.com"] == {"crt.sh", "hackertarget"}
+    assert "api.example.com" in found
+    assert "mail.example.com" in found
+    assert "example.com" in found  # seed + wildcard
+    assert "seed" in found["example.com"]
 
 
 @pytest.mark.asyncio
-async def test_subfinder_not_found(discovery_service):
-    """Test Subfinder not found error handling."""
-    import subprocess
-    
-    with patch('subprocess.run') as mock_run:
-        mock_run.side_effect = FileNotFoundError()
-        
-        result = await discovery_service._run_subfinder("example.com")
-        
-        assert result == set()
+async def test_discover_survives_source_exception(svc):
+    with patch.object(svc, "_crtsh", AsyncMock(side_effect=RuntimeError("boom"))), \
+         patch.object(svc, "_hackertarget", AsyncMock(return_value={"ok.example.com"})), \
+         patch.object(svc, "_certspotter", AsyncMock(return_value=set())), \
+         patch.object(svc, "_rapiddns", AsyncMock(return_value=set())), \
+         patch.object(svc, "_alienvault", AsyncMock(return_value=set())), \
+         patch.object(svc, "_threatminer", AsyncMock(return_value=set())), \
+         patch.object(svc, "_wayback", AsyncMock(return_value=set())), \
+         patch.object(svc, "_bufferover", AsyncMock(return_value=set())), \
+         patch.object(svc, "_threatcrowd", AsyncMock(return_value=set())), \
+         patch.object(svc, "_run_subfinder", return_value=set()), \
+         patch.object(svc, "_run_amass", return_value=set()):
 
+        found = await svc.discover("example.com")
 
-def test_resolve_subdomains_filters_domain(discovery_service):
-    """Test that resolve only includes subdomains of the target domain."""
-    import dns.resolver
-    from unittest.mock import patch
-    
-    subdomains = {
-        "www.example.com",
-        "api.example.com",
-        "other.com",  # Should be filtered out
-    }
-    
-    with patch('dns.resolver.resolve') as mock_resolve:
-        mock_resolve.return_value = [MagicMock(address="93.184.216.34")]
-        
-        # This test would need proper async handling
-        # Simplified for illustration
-        pass
+    # crt.sh blew up but the scan still produced results
+    assert "ok.example.com" in found

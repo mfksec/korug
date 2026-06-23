@@ -19,7 +19,7 @@ from korug.models import (
     VulnerabilityResponse,
     ScanHistoryResponse,
 )
-from korug.services import discovery_service, takeover_detector
+from korug.services import discovery_service, enrichment_service, takeover_detector
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -67,50 +67,63 @@ async def perform_scan(domain_id: int, db: Session):
         start_time = datetime.utcnow()
         
         try:
-            # Discover subdomains
-            discovery_result = await discovery_service.discover_subdomains(domain.domain_name)
-            
-            # Process discovered subdomains
-            existing_count = db.query(Subdomain).filter(Subdomain.domain_id == domain_id).count()
+            # 1. Passive discovery across many sources
+            found = await discovery_service.discover(domain.domain_name)
+            names = list(found.keys())
+
+            # 2. Enrich: DNS resolution, HTTP probe, Cloudflare, ports
+            enriched = await enrichment_service.enrich(names)
+
             new_subdomains = 0
             vulnerabilities_found = 0
-            
-            for subdomain, dns_records in discovery_result.get("subdomains", {}).items():
-                # Check if subdomain already exists
+            persisted = 0
+
+            for subdomain in names:
+                res = enriched.get(subdomain)
+                # Only persist subdomains that actually resolve to something.
+                if not res or not res.resolved():
+                    continue
+                persisted += 1
+                dns_records = res.dns_records
+
                 existing = db.query(Subdomain).filter(
                     Subdomain.domain_id == domain_id,
                     Subdomain.subdomain == subdomain,
                 ).first()
-                
+
                 if not existing:
                     new_subdomains += 1
-                    db_subdomain = Subdomain(
-                        domain_id=domain_id,
-                        subdomain=subdomain,
-                        a_records=json.dumps(dns_records.get("A", [])),
-                        aaaa_records=json.dumps(dns_records.get("AAAA", [])),
-                        cname_record=dns_records.get("CNAME"),
-                        mx_records=json.dumps(dns_records.get("MX", [])),
-                        ns_records=json.dumps(dns_records.get("NS", [])),
-                    )
-                    db.add(db_subdomain)
-                    db.flush()
+                    db_subdomain = Subdomain(domain_id=domain_id, subdomain=subdomain)
                 else:
                     db_subdomain = existing
-                    # Update DNS records
-                    db_subdomain.a_records = json.dumps(dns_records.get("A", []))
-                    db_subdomain.aaaa_records = json.dumps(dns_records.get("AAAA", []))
-                    db_subdomain.cname_record = dns_records.get("CNAME")
-                    db_subdomain.mx_records = json.dumps(dns_records.get("MX", []))
-                    db_subdomain.ns_records = json.dumps(dns_records.get("NS", []))
-                    db.add(db_subdomain)
-                    db.flush()
-                
+
+                # DNS records
+                db_subdomain.a_records = json.dumps(dns_records.get("A", []))
+                db_subdomain.aaaa_records = json.dumps(dns_records.get("AAAA", []))
+                db_subdomain.cname_record = dns_records.get("CNAME")
+                db_subdomain.mx_records = json.dumps(dns_records.get("MX", []))
+                db_subdomain.ns_records = json.dumps(dns_records.get("NS", []))
+                # Provenance + enrichment
+                db_subdomain.sources = ",".join(sorted(found.get(subdomain, [])))
+                db_subdomain.resolved_ips = json.dumps(res.resolved_ips)
+                db_subdomain.is_alive = res.is_alive
+                db_subdomain.status_code = res.status_code
+                db_subdomain.final_url = (res.final_url or None) and res.final_url[:512]
+                db_subdomain.http_title = res.http_title
+                db_subdomain.content_length = res.content_length
+                db_subdomain.web_server = (res.web_server or None) and res.web_server[:255]
+                db_subdomain.technologies = json.dumps(res.technologies)
+                db_subdomain.open_ports = json.dumps(res.open_ports)
+                db_subdomain.is_cloudflare = res.is_cloudflare
+                db_subdomain.last_enriched = datetime.utcnow()
+                db.add(db_subdomain)
+                db.flush()
+
                 # Check for takeover vulnerabilities
                 vulnerabilities = await takeover_detector.check_takeover_risks(
                     subdomain, dns_records
                 )
-                
+
                 for vuln in vulnerabilities:
                     existing_vuln = db.query(Vulnerability).filter(
                         Vulnerability.subdomain_id == db_subdomain.id,
@@ -148,7 +161,7 @@ async def perform_scan(domain_id: int, db: Session):
             
             # Update scan history
             scan.status = "completed"
-            scan.total_subdomains = len(discovery_result.get("subdomains", {}))
+            scan.total_subdomains = persisted
             scan.new_subdomains = new_subdomains
             scan.vulnerabilities_found = vulnerabilities_found
             scan.scan_duration_seconds = (datetime.utcnow() - start_time).total_seconds()
@@ -221,17 +234,86 @@ def get_scan_results(
     
     subdomains = db.query(Subdomain).filter(Subdomain.domain_id == domain_id).all()
     vulnerabilities = db.query(Vulnerability).filter(Vulnerability.domain_id == domain_id).all()
-    
-    # Get last scan history
+
     last_scan = db.query(ScanHistory).filter(
         ScanHistory.domain_id == domain_id
     ).order_by(ScanHistory.scan_timestamp.desc()).first()
-    
+
+    sub_dicts = [_serialize_subdomain(s) for s in subdomains]
+
+    # Classify: group subdomains that resolve to the same IP address.
+    ip_map: dict[str, list[str]] = {}
+    for s in sub_dicts:
+        for ip in s["resolved_ips"]:
+            ip_map.setdefault(ip, []).append(s["subdomain"])
+    ip_groups = [
+        {"ip": ip, "subdomains": sorted(names), "count": len(names)}
+        for ip, names in sorted(ip_map.items(), key=lambda kv: len(kv[1]), reverse=True)
+    ]
+
     return {
-        "domain": domain,
-        "subdomains": subdomains,
-        "vulnerabilities": vulnerabilities,
-        "last_scan": last_scan,
+        "domain": {
+            "id": domain.id,
+            "domain_name": domain.domain_name,
+            "enabled": domain.enabled,
+            "last_scanned": domain.last_scanned.isoformat() + "Z" if domain.last_scanned else None,
+        },
+        "counts": {
+            "subdomains": len(sub_dicts),
+            "alive": len([s for s in sub_dicts if s["is_alive"]]),
+            "vulnerabilities": len(vulnerabilities),
+            "cloudflare": len([s for s in sub_dicts if s["is_cloudflare"]]),
+        },
+        "ip_groups": ip_groups,
+        "subdomains": sub_dicts,
+        "vulnerabilities": [_serialize_vuln(v) for v in vulnerabilities],
+        "last_scan": {
+            "status": last_scan.status,
+            "scan_timestamp": last_scan.scan_timestamp.isoformat() + "Z" if last_scan.scan_timestamp else None,
+            "total_subdomains": last_scan.total_subdomains,
+            "new_subdomains": last_scan.new_subdomains,
+            "vulnerabilities_found": last_scan.vulnerabilities_found,
+            "scan_duration_seconds": last_scan.scan_duration_seconds,
+        } if last_scan else None,
+    }
+
+
+def _json_list(value: str | None) -> list:
+    try:
+        return json.loads(value) if value else []
+    except (ValueError, TypeError):
+        return []
+
+
+def _serialize_subdomain(s: Subdomain) -> dict:
+    return {
+        "id": s.id,
+        "subdomain": s.subdomain,
+        "sources": (s.sources or "").split(",") if s.sources else [],
+        "resolved_ips": _json_list(s.resolved_ips) or _json_list(s.a_records),
+        "cname": s.cname_record,
+        "is_alive": bool(s.is_alive),
+        "status_code": s.status_code,
+        "final_url": s.final_url,
+        "http_title": s.http_title,
+        "content_length": s.content_length,
+        "web_server": s.web_server,
+        "technologies": _json_list(s.technologies),
+        "open_ports": _json_list(s.open_ports),
+        "is_cloudflare": bool(s.is_cloudflare),
+        "first_discovered": s.first_discovered.isoformat() + "Z" if s.first_discovered else None,
+    }
+
+
+def _serialize_vuln(v: Vulnerability) -> dict:
+    return {
+        "id": v.id,
+        "subdomain_id": v.subdomain_id,
+        "vuln_type": v.vuln_type,
+        "confidence_score": v.confidence_score,
+        "details": v.details,
+        "is_false_positive": v.is_false_positive,
+        "found_at": v.found_at.isoformat() + "Z" if v.found_at else None,
     }
 
 
