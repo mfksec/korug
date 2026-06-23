@@ -6,7 +6,7 @@
 git clone https://github.com/mfksec/korug.git
 cd korug
 cp .env.example .env     # fill in the required values below
-docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml up -d --build
 curl http://localhost:8000/health
 ```
 

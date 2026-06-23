@@ -8,7 +8,7 @@ Get Körüg running with Docker in a few minutes.
 git clone https://github.com/mfksec/korug.git
 cd korug
 cp .env.example .env     # set DATABASE_URL, JWT_SECRET_KEY, API_KEY, ALLOWED_ORIGINS
-docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
 | Service | URL |
@@ -46,8 +46,19 @@ Go to **Integrations** (admin) to add a Slack webhook or SMTP email settings and
 ```bash
 docker compose -f docker/docker-compose.yml ps            # status
 docker compose -f docker/docker-compose.yml logs -f korug-api
+docker compose -f docker/docker-compose.yml up -d --build  # rebuild after pulling updates
 docker compose -f docker/docker-compose.yml down          # stop
 docker compose -f docker/docker-compose.yml down -v       # stop + wipe data
 ```
+
+**Still seeing the old version after an update?** Docker reused cached images. Rebuild from scratch:
+
+```bash
+docker compose -f docker/docker-compose.yml down
+docker compose -f docker/docker-compose.yml build --no-cache
+docker compose -f docker/docker-compose.yml up -d --force-recreate
+```
+
+Then hard-refresh the browser (Cmd/Ctrl+Shift+R).
 
 For local (non-Docker) development, see [Installation](INSTALLATION.md).
