@@ -12,14 +12,23 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 
 # Features
 
-**Discovery & detection**
-- Multi-source subdomain discovery (Subfinder, Amass, Shodan, urlscan)
-- Takeover detection — unclaimed S3 buckets, orphaned CNAME / MX / NS records — with per-finding confidence scoring
+**Passive discovery**
+- Aggregates subdomains from many free, no-key sources — crt.sh, HackerTarget, CertSpotter, RapidDNS, AlienVault OTX, ThreatMiner, Wayback, BufferOver, ThreatCrowd
+- Optional key-gated sources: VirusTotal, SecurityTrails, BinaryEdge, Censys, urlscan, Shodan; plus local Subfinder/Amass
+- Per-source attribution; every source is best-effort so one failure never fails a scan
+
+**Enrichment & detection**
+- DNS resolution to IPs, with subdomains classified by shared IP
+- HTTP(S) probing with smart https→http fallback: status code, final URL, title, content-length, server
+- Technology fingerprinting and Cloudflare detection
+- Optional port scan (nmap with service/version when available, else built-in TCP scan)
+- Subdomain takeover detection — unclaimed S3 buckets, orphaned CNAME / MX / NS — with per-finding confidence scoring
 
 **Dashboard**
 - Redesigned React UI with a sidebar app shell and light/dark mode
+- Add, edit, and scan domains; per-scan opt-in port scanning
+- Domain detail view: subdomains, IPs (grouped), HTTP/title/server, technologies, open ports, Cloudflare, vulnerabilities
 - Real-time analytics: 30-day discovery trend, severity distribution, and findings by type
-- Per-domain scan history and results
 
 **Alerts & notifications**
 - In-app security alerts raised automatically from scan findings

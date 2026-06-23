@@ -53,12 +53,17 @@ Set in `.env` (or the shell / `docker/.env.docker`). See [.env.example](../.env.
 | `ALLOWED_ORIGINS` | yes | comma-separated CORS origins |
 | `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | no | first-run admin seed; blank password → auto-generated and logged |
 | `REDIS_URL` | no | distributed rate limiting & token revocation |
-| `SHODAN_API_KEY` / `URLSCAN_API_KEY` | no | extra discovery sources |
+| `SHODAN_API_KEY` / `URLSCAN_API_KEY` / `VIRUSTOTAL_API_KEY` / `SECURITYTRAILS_API_KEY` / `BINARYEDGE_API_KEY` | no | key-gated discovery sources (free sources need no key) |
+| `CENSYS_API_ID` / `CENSYS_API_SECRET` | no | Censys Search v2 source (both required) |
 | `SUBFINDER_PATH` / `AMASS_PATH` | no | tool locations |
+| `ENABLE_HTTP_PROBE` | no | HTTP(S) probe of live subdomains (default true) |
+| `ENABLE_PORT_SCAN` / `PORT_SCAN_PORTS` | no | default port scan on/off + port list (also toggled per scan in the UI) |
+| `NMAP_PATH` / `NMAP_SERVICE_DETECTION` | no | nmap location + `-sV` service detection (falls back to a built-in TCP scan) |
+| `ENRICHMENT_CONCURRENCY` / `HTTP_PROBE_TIMEOUT` | no | enrichment tuning |
 | `SCAN_SCHEDULE_HOUR` / `SCAN_SCHEDULE_MINUTE` | no | daily scan time (UTC) |
 | `CONFIDENCE_THRESHOLD` | no | minimum score to alert (default 75) |
 
-> Slack and email are configured at runtime from the **Integrations** page (stored in the database), not via env vars.
+> Slack and email are configured at runtime from the **Integrations** page (stored in the database), not via env vars. Most discovery sources are free and need no key; the keys above only unlock extra providers. Port scanning is active — keep it off unless you're authorized to scan the targets. The Docker image ships with nmap; for local installs, `brew install nmap` (or `apt-get install nmap`) to get service/version detection.
 
 ## Troubleshooting
 

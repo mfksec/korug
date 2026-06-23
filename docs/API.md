@@ -45,8 +45,8 @@ Admin-only endpoints are marked 🔒.
 ### Scans
 | Method | Path | |
 |--------|------|--|
-| POST | `/api/scans/{domain_id}/scan` | trigger scan |
-| GET | `/api/scans/{domain_id}/results` | latest results |
+| POST | `/api/scans/{domain_id}/scan` | trigger scan (`?port_scan=true` to include a port scan) |
+| GET | `/api/scans/{domain_id}/results` | enriched results: subdomains, IP groups, vulnerabilities |
 | GET | `/api/scans/history/{domain_id}` | scan history |
 
 ### Vulnerabilities

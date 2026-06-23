@@ -16,7 +16,8 @@ Also: [Security Policy](../SECURITY.md) · [Contributing](../CONTRIBUTING.md) ·
 
 ## Concepts in one minute
 
-- **Discovery** — subdomains are enumerated from Subfinder, Amass, and (optionally) Shodan and urlscan.
+- **Discovery** — subdomains are aggregated from many free sources (crt.sh, HackerTarget, CertSpotter, RapidDNS, AlienVault OTX, ThreatMiner, Wayback, BufferOver, ThreatCrowd), optional key-gated providers (VirusTotal, SecurityTrails, BinaryEdge, Censys, urlscan, Shodan), and local Subfinder/Amass.
+- **Enrichment** — each subdomain is resolved to IPs (grouped by shared IP), HTTP(S)-probed (status/title/server, https→http fallback), fingerprinted for technologies, Cloudflare-flagged, and optionally port-scanned.
 - **Detection** — each subdomain is checked for takeover risk: unclaimed S3 buckets and orphaned CNAME / MX / NS records.
 - **Confidence** — every finding gets a 0–100 score; only findings at or above the threshold (default 75) raise alerts.
 - **Alerts** — findings surface in the dashboard and can be pushed to Slack and email.
@@ -25,5 +26,5 @@ Also: [Security Policy](../SECURITY.md) · [Contributing](../CONTRIBUTING.md) ·
 ## FAQ
 
 **Run without Shodan/urlscan keys?** Yes — it falls back to Subfinder/Amass.
-**Trigger scans?** Via the CLI (`korug scan`), the API, or the daily scheduler. Add/remove domains in the dashboard.
+**Trigger scans?** From the dashboard (Run scan, with an optional port-scan toggle), the CLI (`korug scan`), the API, or the daily scheduler.
 **Scan third-party domains?** Only domains you add — make sure you're authorized.

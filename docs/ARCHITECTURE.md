@@ -18,7 +18,8 @@ The frontend is a single-page React/Vite app (MUI + Recharts). The backend is Fa
 
 ## Services (`src/korug/services/`)
 
-- **discovery.py** — enumerates subdomains via Subfinder, Amass, and optionally Shodan/urlscan; resolves DNS and deduplicates.
+- **discovery.py** — aggregates subdomains concurrently from many free web sources (crt.sh, HackerTarget, CertSpotter, RapidDNS, AlienVault OTX, ThreatMiner, Wayback, BufferOver, ThreatCrowd), key-gated providers (VirusTotal, SecurityTrails, BinaryEdge, Censys, urlscan, Shodan), and local Subfinder/Amass. Per-source attribution; best-effort.
+- **enrichment.py** — concurrent DNS resolution, HTTP(S) probing (status/title/server, https→http fallback), technology fingerprinting, Cloudflare IP-range detection, and an optional port scan (nmap with `-sV` when available, else an async TCP connect scan; nmap XML parsed with defusedxml).
 - **takeover_detection.py** — scores takeover risk: unclaimed S3 buckets (boto3), orphaned CNAME, and orphaned MX/NS (dnspython). Each finding gets a 0–100 confidence.
 - **slack_integration.py** — posts alerts/summaries to a Slack webhook.
 - **email_integration.py** — sends alerts/test mail over SMTP (stateless; config passed in).
@@ -29,7 +30,7 @@ The frontend is a single-page React/Vite app (MUI + Recharts). The backend is Fa
 |-------|---------|
 | `User` | Accounts, roles, password hash |
 | `Domain` | A monitored domain |
-| `Subdomain` | Discovered subdomain + DNS records |
+| `Subdomain` | Discovered subdomain + DNS records, sources, and enrichment (IPs, HTTP status/title/server, technologies, open ports, Cloudflare) |
 | `Vulnerability` | Finding with type, confidence, false-positive flag |
 | `ScanHistory` | Per-scan stats and status |
 | `Alert` | Alert raised from a finding (resolvable) |
@@ -45,9 +46,11 @@ The frontend is a single-page React/Vite app (MUI + Recharts). The backend is Fa
 ## Scan flow
 
 ```
-trigger (CLI / API / scheduler)
-  → discovery (Subfinder, Amass, Shodan, urlscan) + DNS resolution
-  → upsert subdomains
+trigger (dashboard / CLI / API / scheduler)
+  → discovery: aggregate names from all configured sources (concurrent)
+  → enrichment: resolve DNS → group by IP → HTTP(S) probe → tech + Cloudflare
+                → optional port scan
+  → upsert resolvable subdomains with their enrichment
   → takeover detection per subdomain
   → store vulnerabilities, raise Alerts for new findings
   → notify Slack / email (if enabled)
@@ -58,7 +61,7 @@ The scheduler (`scheduler.py`, APScheduler) runs scans daily at the configured t
 
 ## Stack
 
-FastAPI · SQLAlchemy · PostgreSQL · Redis (optional) · Click (CLI) · APScheduler · dnspython · boto3 · openpyxl (XLSX) · React + Vite + MUI + Recharts · JWT (bcrypt password hashing) · Docker.
+FastAPI · SQLAlchemy · PostgreSQL · Redis (optional) · Click (CLI) · APScheduler · aiohttp · dnspython · boto3 · nmap + defusedxml (port scan) · openpyxl (XLSX) · React + Vite + MUI + Recharts · JWT (bcrypt password hashing) · Docker.
 
 ## Security notes
 
