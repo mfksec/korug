@@ -1,350 +1,103 @@
 # API Reference
 
-## Base URL
-```
-http://localhost:8000
-```
+Base URL: `http://localhost:8000`. Interactive docs: **`/docs`** (Swagger) and `/redoc`.
 
 ## Authentication
 
-Körüg supports **two authentication methods**:
+Two ways to authenticate; both use a bearer token.
 
-### 1. **User Authentication** (JWT Tokens)
-For dashboard users and most API clients.
+**JWT (users)** — log in, then send the access token on each request:
 
-**Get a token:**
-```http
-POST /api/auth/login
-Content-Type: application/json
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"…"}'
+# → { "access_token": "…", "refresh_token": "…" }
 
-{
-  "username": "admin",
-  "password": "your_password"
-}
+curl http://localhost:8000/api/domains/ -H "Authorization: Bearer <access_token>"
 ```
 
-**Response:**
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer"
-}
-```
+Access tokens last 1 hour; exchange a refresh token at `POST /api/auth/refresh`. Logout revokes the token.
 
-**Use the access token:**
-```http
-GET /api/domains/
-Authorization: Bearer <access_token>
-```
+**API key (services)** — send the `API_KEY` value as a bearer token: `Authorization: Bearer <API_KEY>`.
 
-**Refresh the token (when expired):**
-```http
-POST /api/auth/refresh
-Content-Type: application/json
-
-{
-  "refresh_token": "<refresh_token>"
-}
-```
-
-### 2. **API Key Authentication**
-For service-to-service integrations and scripts.
-
-**Include API key in headers:**
-```http
-GET /api/domains/
-Authorization: Bearer YOUR_API_KEY
-```
-
-**Note**: API key is the same `API_KEY` environment variable used for the backend.
-
----
-
-**For full authentication details**, see [Authentication & User Management](AUTH.md).
+See [Authentication & Users](AUTH.md) for roles and details.
 
 ## Endpoints
 
-### Authentication
+Admin-only endpoints are marked 🔒.
 
-#### Login
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "username": "admin",
-  "password": "password"
-}
-```
-
-#### Get Current User
-```http
-GET /api/auth/me
-Authorization: Bearer <access_token>
-```
-
-#### Refresh Token
-```http
-POST /api/auth/refresh
-Content-Type: application/json
-
-{
-  "refresh_token": "<refresh_token>"
-}
-```
-
-#### Logout
-```http
-POST /api/auth/logout
-Authorization: Bearer <access_token>
-```
+### Auth
+| Method | Path |
+|--------|------|
+| POST | `/api/auth/login` |
+| POST | `/api/auth/refresh` |
+| POST | `/api/auth/logout` |
+| GET | `/api/auth/me` |
 
 ### Domains
+| Method | Path | |
+|--------|------|--|
+| GET / POST | `/api/domains/` | list / create |
+| GET / PUT / DELETE | `/api/domains/{id}` | get / update / delete |
+| GET | `/api/domains/stats/dashboard` | dashboard totals |
 
-#### Create Domain
-```http
-POST /api/domains/
-Content-Type: application/json
-Authorization: Bearer <access_token>
-
-{
-  "domain_name": "example.com"
-}
-```
-
-Response:
-```json
-{
-  "id": 1,
-  "domain_name": "example.com",
-  "enabled": true,
-  "last_scanned": null,
-  "created_at": "2026-06-18T00:00:00",
-  "updated_at": "2026-06-18T00:00:00"
-}
-```
-
-#### List Domains
-```http
-GET /api/domains/?skip=0&limit=100
-Authorization: Bearer <access_token>
-```
-
-#### Get Domain
-```http
-GET /api/domains/1
-Authorization: Bearer <access_token>
-```
-
-#### Update Domain
-```http
-PUT /api/domains/1
-Content-Type: application/json
-Authorization: Bearer <access_token>
-
-{
-  "enabled": false
-}
-```
-
-#### Delete Domain
-```http
-DELETE /api/domains/1
-Authorization: Bearer <access_token>
-```
-
-### Scanning
-
-#### Trigger Scan
-```http
-POST /api/scans/1/scan
-Authorization: Bearer <access_token>
-```
-
-Response:
-```json
-{
-  "message": "Scan started for example.com",
-  "domain_id": 1
-}
-```
-
-#### Get Scan Results
-```http
-GET /api/scans/1/results
-Authorization: Bearer YOUR_API_KEY
-```
-
-#### Get Scan History
-```http
-GET /api/scans/history/1?skip=0&limit=100
-Authorization: Bearer YOUR_API_KEY
-```
+### Scans
+| Method | Path | |
+|--------|------|--|
+| POST | `/api/scans/{domain_id}/scan` | trigger scan |
+| GET | `/api/scans/{domain_id}/results` | latest results |
+| GET | `/api/scans/history/{domain_id}` | scan history |
 
 ### Vulnerabilities
+| Method | Path | |
+|--------|------|--|
+| GET | `/api/vulnerabilities/` | list (filter by `domain_id`, `vuln_type`) |
+| GET / PATCH / DELETE | `/api/vulnerabilities/{id}` | get / flag false positive / delete |
+| GET | `/api/vulnerabilities/stats/summary` | totals by severity & type |
+| GET | `/api/vulnerabilities/stats/timeline?days=30` | daily trend |
+| GET | `/api/vulnerabilities/stats/confidence-distribution` | severity bands |
 
-#### List Vulnerabilities
-```http
-GET /api/vulnerabilities/?domain_id=1&vuln_type=s3_bucket_takeover&skip=0&limit=100
-Authorization: Bearer YOUR_API_KEY
-```
+### Alerts
+| Method | Path | |
+|--------|------|--|
+| GET | `/api/alerts/` | list (filter by `status`, `severity`, `domain`) |
+| GET | `/api/alerts/{id}` | get |
+| POST | `/api/alerts/{id}/resolve` · `/unresolve` | change status |
+| DELETE | `/api/alerts/{id}` | delete |
+| GET | `/api/alerts/stats/summary` | counts by status & severity |
 
-#### Get Vulnerability
-```http
-GET /api/vulnerabilities/1
-Authorization: Bearer YOUR_API_KEY
-```
+### Users
+| Method | Path | |
+|--------|------|--|
+| GET / POST | `/api/users/` 🔒 | list / create |
+| GET / PATCH / DELETE | `/api/users/{id}` 🔒 | get / update role·email·active / delete |
+| POST | `/api/users/{id}/password` 🔒 | reset a user's password |
+| GET / PATCH | `/api/users/me` | own profile |
+| POST | `/api/users/me/password` | change own password |
 
-#### Mark False Positive
-```http
-PATCH /api/vulnerabilities/1
-Content-Type: application/json
-Authorization: Bearer YOUR_API_KEY
+### Integrations
+| Method | Path | |
+|--------|------|--|
+| GET | `/api/integrations/` | current config (secrets masked) |
+| PUT | `/api/integrations/slack` 🔒 · `/email` 🔒 | update |
+| POST | `/api/integrations/slack/test` 🔒 · `/email/test` 🔒 | send a test |
 
-{
-  "is_false_positive": true,
-  "false_positive_reason": "This is a legitimate service"
-}
-```
+### Settings
+| Method | Path | |
+|--------|------|--|
+| GET / POST | `/api/settings/settings/user` | preferences |
+| GET / POST | `/api/settings/apikeys` | list / create API key |
+| POST / DELETE | `/api/settings/apikeys/{id}/revoke` · `/api/settings/apikeys/{id}` | revoke / delete |
+| GET | `/api/settings/audit-logs` | audit entries (own; admins see all) |
+| GET | `/api/settings/audit-logs/stats/summary` | audit stats |
 
-#### Delete Vulnerability
-```http
-DELETE /api/vulnerabilities/1
-Authorization: Bearer YOUR_API_KEY
-```
+### Export & health
+| Method | Path | |
+|--------|------|--|
+| GET | `/api/export/xlsx/{domain_id}` | XLSX report (subdomains + vulnerabilities) |
+| GET | `/health` | health check (no auth) |
 
-### Export
+## Errors
 
-#### Export to XLSX
-```http
-GET /api/export/xlsx/1
-Authorization: Bearer YOUR_API_KEY
-```
-
-Returns XLSX file with:
-- Sheet 1: Subdomains and DNS records
-- Sheet 2: Vulnerabilities
-
-## Error Responses
-
-### 400 Bad Request
-```json
-{
-  "detail": "Invalid request"
-}
-```
-
-### 403 Forbidden
-```json
-{
-  "detail": "Valid API key required"
-}
-```
-
-### 404 Not Found
-```json
-{
-  "detail": "Domain with id 1 not found"
-}
-```
-
-### 409 Conflict
-```json
-{
-  "detail": "Domain example.com already exists"
-}
-```
-
-### 500 Internal Server Error
-```json
-{
-  "detail": "Internal server error"
-}
-```
-
-## Examples
-
-### Python
-```python
-import requests
-
-API_KEY = "your-api-key"
-BASE_URL = "http://localhost:8000"
-headers = {"Authorization": f"Bearer {API_KEY}"}
-
-# Add domain
-response = requests.post(
-    f"{BASE_URL}/api/domains/",
-    json={"domain_name": "example.com"},
-    headers=headers
-)
-domain_id = response.json()["id"]
-
-# Trigger scan
-response = requests.post(
-    f"{BASE_URL}/api/scans/{domain_id}/scan",
-    headers=headers
-)
-
-# Get results
-response = requests.get(
-    f"{BASE_URL}/api/scans/{domain_id}/results",
-    headers=headers
-)
-print(response.json())
-```
-
-### cURL
-```bash
-API_KEY="your-api-key"
-BASE_URL="http://localhost:8000"
-
-# Add domain
-curl -X POST "$BASE_URL/api/domains/" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $API_KEY" \
-  -d '{"domain_name": "example.com"}'
-
-# List domains
-curl "$BASE_URL/api/domains/" \
-  -H "Authorization: Bearer $API_KEY"
-
-# Trigger scan
-curl -X POST "$BASE_URL/api/scans/1/scan" \
-  -H "Authorization: Bearer $API_KEY"
-
-# Export to XLSX
-curl "$BASE_URL/api/export/xlsx/1" \
-  -H "Authorization: Bearer $API_KEY" \
-  -o report.xlsx
-```
-
-### JavaScript
-```javascript
-const API_KEY = "your-api-key";
-const BASE_URL = "http://localhost:8000";
-
-async function listDomains() {
-  const response = await fetch(`${BASE_URL}/api/domains/`, {
-    headers: { Authorization: `Bearer ${API_KEY}` }
-  });
-  return response.json();
-}
-
-async function addDomain(domainName) {
-  const response = await fetch(`${BASE_URL}/api/domains/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${API_KEY}`
-    },
-    body: JSON.stringify({ domain_name: domainName })
-  });
-  return response.json();
-}
-```
-
-## Interactive Documentation
-
-Visit `http://localhost:8000/docs` (Swagger UI) or `http://localhost:8000/redoc` (ReDoc) for interactive API documentation where you can try requests directly.
+Errors return `{ "detail": "…" }` with a standard status code — `400` bad request, `401` unauthenticated, `403` forbidden (e.g. non-admin), `404` not found, `409` conflict, `5xx` server error.

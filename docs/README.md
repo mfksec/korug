@@ -1,69 +1,29 @@
-# Overview
+# Documentation
 
-This directory contains the core documentation for Körüg.
+Core documentation for Körüg.
 
-## Getting Started
+| Doc | What's in it |
+|-----|--------------|
+| [Quick Start](QUICKSTART.md) | Run Körüg with Docker in a few minutes |
+| [Installation](INSTALLATION.md) | Docker and local-dev setup, environment variables |
+| [User Guide](USER_GUIDE.md) | The web dashboard, page by page |
+| [Authentication & Users](AUTH.md) | Login, roles, user management, API keys |
+| [API Reference](API.md) | REST endpoints (Swagger lives at `/docs`) |
+| [CLI Reference](CLI.md) | Command-line tool |
+| [Architecture](ARCHITECTURE.md) | Components, data model, data flow |
 
-1. **[Quick Start Guide](QUICKSTART.md)** - Get running in 5 minutes
-2. **[Installation Guide](INSTALLATION.md)** - Detailed setup instructions
-3. **[Authentication & Users](AUTH.md)** - Login, user management, security
+Also: [Security Policy](../SECURITY.md) · [Contributing](../CONTRIBUTING.md) · [Changelog](../CHANGELOG.md)
 
-## Using Körüg
+## Concepts in one minute
 
-- **[User Guide](USER_GUIDE.md)** - Dashboard features and workflows
-- **[API Reference](API.md)** - REST API endpoints with examples
-- **[CLI Reference](CLI.md)** - Command-line tool documentation
-- **[Architecture](ARCHITECTURE.md)** - System design and components
-
-## Security & Operations
-
-- **[Security Policy](../SECURITY.md)** - Reporting vulnerabilities & best practices
-- **[Contributing Guide](../CONTRIBUTING.md)** - How to contribute
-- **[Changelog](../CHANGELOG.md)** - Release history
-
-## Key Concepts
-
-### Authentication
-Two authentication methods supported:
-- **User JWT Tokens**: Login with username/password for dashboard and API access
-- **API Keys**: Service-to-service authentication for scripts and integrations
-- See [Authentication & Users](AUTH.md) for complete details
-
-### Discovery Process
-Subdomains are discovered using multiple passive sources:
-- Subfinder & Amass (local tools)
-- Shodan.io & urlscan.io APIs (optional)
-
-### Vulnerability Types
-Three main vulnerability types detected:
-1. **S3 Bucket Takeover** - CNAME to unclaimed S3 bucket
-2. **CNAME Orphan** - CNAME target doesn't exist
-3. **DNS Orphans** - MX/NS records pointing to missing servers
-
-### Confidence Scoring
-All findings include a confidence score (0-100%). Only findings ≥75% (configurable) trigger alerts.
-
-## Recommended Reading Order
-
-1. Start with [Quick Start](INSTALLATION.md#quick-start)
-2. Review [API Reference](API.md) or [CLI Reference](CLI.md) depending on your usage
-3. Explore [Architecture](ARCHITECTURE.md) for understanding the system
-4. Check [Contributing](../CONTRIBUTING.md) if you want to help
+- **Discovery** — subdomains are enumerated from Subfinder, Amass, and (optionally) Shodan and urlscan.
+- **Detection** — each subdomain is checked for takeover risk: unclaimed S3 buckets and orphaned CNAME / MX / NS records.
+- **Confidence** — every finding gets a 0–100 score; only findings at or above the threshold (default 75) raise alerts.
+- **Alerts** — findings surface in the dashboard and can be pushed to Slack and email.
+- **Access** — JWT auth with `admin` and `viewer` roles; API keys for scripts.
 
 ## FAQ
 
-**Q: Can I run this without Shodan/urlscan APIs?**
-A: Yes! The tool falls back to free Subfinder/Amass sources.
-
-**Q: How often can I scan?**
-A: Scan frequency is configurable via cron or APScheduler (default: daily).
-
-**Q: Does this scan third-party domains?**
-A: Only domains you add. Always ensure you have permission before scanning.
-
-**Q: Can I export results?**
-A: Yes, XLSX export includes all subdomains and vulnerabilities.
-
-## Troubleshooting
-
-See [Installation Guide](INSTALLATION.md#troubleshooting) for common issues.
+**Run without Shodan/urlscan keys?** Yes — it falls back to Subfinder/Amass.
+**Trigger scans?** Via the CLI (`korug scan`), the API, or the daily scheduler. Add/remove domains in the dashboard.
+**Scan third-party domains?** Only domains you add — make sure you're authorized.

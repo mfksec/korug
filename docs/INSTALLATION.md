@@ -1,177 +1,68 @@
-# Installation & Setup Guide
+# Installation
 
-## Quick Start
-
-### Using Docker (Recommended)
+## Docker (recommended)
 
 ```bash
 git clone https://github.com/mfksec/korug.git
 cd korug
-
-# Copy environment template
-cp .env.example .env
-
-# Start services
-docker-compose -f docker/docker-compose.yml up -d
-
-# Initialize database
-docker exec korug_app python -m korug.cli init-database
-
-# Test it's running
+cp .env.example .env     # fill in the required values below
+docker compose -f docker/docker-compose.yml up -d
 curl http://localhost:8000/health
 ```
 
-Visit: `http://localhost:8000/docs` to see the API documentation.
+Dashboard: http://localhost:3000 · API docs: http://localhost:8000/docs
 
-### Local Development Setup
+## Local development
 
-#### Requirements
-- Python 3.11+
-- PostgreSQL 14+
-- Subfinder
-- Amass
+Requirements: Python 3.11+, Node.js 18+, PostgreSQL 14+ (or SQLite for testing), and Subfinder/Amass for discovery.
 
-#### Installation Steps
+**Backend**
 
 ```bash
-# Clone repository
-git clone https://github.com/mfksec/korug.git
-cd korug
-
-# Create virtual environment
-python3.11 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
+python3.11 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+brew install subfinder amass            # macOS
 
-# Install external tools (macOS)
-brew install subfinder amass
+export DATABASE_URL="sqlite:///./korug.db"   # or a postgresql:// URL
+export JWT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export ALLOWED_ORIGINS="http://localhost:5173,http://localhost:8000"
 
-# Setup environment
-cp .env.example .env
-# Edit .env with your settings
-```
-
-#### Database Setup
-
-```bash
-# Ensure PostgreSQL is running
-psql -U postgres
-
-# Create database and user
-CREATE DATABASE korug;
-CREATE USER subdomain_user WITH PASSWORD 'subdomain_password';
-GRANT ALL PRIVILEGES ON DATABASE korug TO subdomain_user;
-\q
-
-# Initialize schema
 python -m korug.cli init-database
+python -m korug.cli create-user        # interactive: username, email, password, role
+python -m korug.run                    # API on :8000
 ```
 
-#### Run Application
+**Frontend**
 
 ```bash
-# Terminal 1: FastAPI server
-python -m korug.run
-
-# Terminal 2: Use CLI or visit http://localhost:8000/docs
-python -m korug.cli list-domains
+cd frontend
+npm install
+npm run dev                            # dashboard on :5173
 ```
 
-## Configuration
+## Environment variables
 
-### Environment Variables
+Set in `.env` (or the shell / `docker/.env.docker`). See [.env.example](../.env.example) for the full list.
 
-Create `.env` file with your settings:
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `DATABASE_URL` | yes | `postgresql://…` or `sqlite:///./korug.db` |
+| `JWT_SECRET_KEY` | yes | 32+ random bytes |
+| `API_KEY` | yes | service-to-service key |
+| `ALLOWED_ORIGINS` | yes | comma-separated CORS origins |
+| `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | no | first-run admin seed; blank password → auto-generated and logged |
+| `REDIS_URL` | no | distributed rate limiting & token revocation |
+| `SHODAN_API_KEY` / `URLSCAN_API_KEY` | no | extra discovery sources |
+| `SUBFINDER_PATH` / `AMASS_PATH` | no | tool locations |
+| `SCAN_SCHEDULE_HOUR` / `SCAN_SCHEDULE_MINUTE` | no | daily scan time (UTC) |
+| `CONFIDENCE_THRESHOLD` | no | minimum score to alert (default 75) |
 
-```bash
-# Database
-DATABASE_URL=postgresql://subdomain_user:password@localhost:5432/korug
-
-# API
-FASTAPI_ENV=development
-FASTAPI_DEBUG=true
-API_KEY=your-secret-api-key
-
-# Tools
-SUBFINDER_PATH=/usr/local/bin/subfinder
-AMASS_PATH=/usr/local/bin/amass
-
-# External APIs (Optional)
-SHODAN_API_KEY=your-shodan-key
-URLSCAN_API_KEY=your-urlscan-key
-
-# Slack (Optional)
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
-SLACK_ENABLED=false
-
-# Scanning
-SCAN_SCHEDULE_HOUR=0
-SCAN_SCHEDULE_MINUTE=0
-CONFIDENCE_THRESHOLD=75
-```
-
-### Getting API Keys
-
-#### Shodan.io
-1. Visit https://www.shodan.io/
-2. Sign up and navigate to Account Settings
-3. Copy API key to `.env`
-
-#### urlscan.io
-1. Visit https://urlscan.io/
-2. Create account
-3. Get API key from Settings
-
-#### Slack Webhook
-1. Create Slack app at https://api.slack.com/apps
-2. Enable Incoming Webhooks
-3. Add webhook URL to `.env`
+> Slack and email are configured at runtime from the **Integrations** page (stored in the database), not via env vars.
 
 ## Troubleshooting
 
-### Port 8000 Already in Use
-```bash
-# Use different port
-export PORT=8001
-python -m korug.run
-```
-
-### PostgreSQL Connection Error
-```bash
-# Check PostgreSQL is running
-psql -U subdomain_user -d korug -c "SELECT 1"
-
-# Check connection string in .env
-DATABASE_URL=postgresql://subdomain_user:password@localhost:5432/korug
-```
-
-### Subfinder/Amass Not Found
-```bash
-# macOS
-brew install subfinder amass
-
-# Ubuntu/Debian
-sudo apt-get install subfinder
-
-# Or download from GitHub
-# https://github.com/projectdiscovery/subfinder
-# https://github.com/OWASP/Amass
-```
-
-### Tests Failing
-```bash
-# Ensure all dependencies installed
-pip install -r requirements.txt
-
-# Run tests with verbose output
-pytest tests/ -v --tb=short
-```
-
-## Next Steps
-
-- Read [API Documentation](./api.md)
-- Check [CLI Usage](./cli.md)
-- Review [Architecture](./architecture.md)
-- See [Contributing Guide](../CONTRIBUTING.md)
+- **Port in use** — set `PORT=8001` (API) or run the frontend with `npm run dev -- --port 3001`.
+- **PostgreSQL refused** — verify `DATABASE_URL`, or use SQLite for local work.
+- **Subfinder/Amass not found** — install them and/or set `SUBFINDER_PATH` / `AMASS_PATH`.
+- **Tests** — `pip install -r requirements.txt && pytest tests/ -v`.
