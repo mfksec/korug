@@ -104,7 +104,7 @@ class ScanHistory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     domain_id = Column(Integer, ForeignKey("domains.id"), nullable=False, index=True)
-    
+
     # Scan details
     scan_timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     total_subdomains = Column(Integer, default=0)
@@ -112,12 +112,85 @@ class ScanHistory(Base):
     vulnerabilities_found = Column(Integer, default=0)
     status = Column(String(50), default="pending")  # pending, running, completed, failed
     error_message = Column(Text, nullable=True)
-    
+
     # Performance metrics
     scan_duration_seconds = Column(Float, nullable=True)
-    
+
     # Relationships
     domain = relationship("Domain", back_populates="scan_history")
 
     def __repr__(self) -> str:
         return f"<ScanHistory(id={self.id}, domain_id={self.domain_id}, status={self.status})>"
+
+
+class Alert(Base):
+    """Alert model - security alerts generated from scan findings."""
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    domain_id = Column(Integer, ForeignKey("domains.id"), nullable=True, index=True)
+    vulnerability_id = Column(Integer, ForeignKey("vulnerabilities.id"), nullable=True, index=True)
+
+    # Display name of the affected domain/subdomain
+    target = Column(String(255), nullable=False)
+    alert_type = Column(String(100), nullable=False, index=True)
+    severity = Column(String(20), nullable=False, index=True)  # critical, high, medium, low
+    message = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    resolved_at = Column(DateTime, nullable=True)
+    is_resolved = Column(Boolean, default=False, index=True)
+
+    def __repr__(self) -> str:
+        return f"<Alert(id={self.id}, target={self.target}, severity={self.severity})>"
+
+
+class ApiKey(Base):
+    """ApiKey model - programmatic access keys for a user."""
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    key_hash = Column(String(255), nullable=False)  # hash of the full secret
+    key_display = Column(String(64), nullable=False)  # masked, e.g. sk-****abcd1234
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    def __repr__(self) -> str:
+        return f"<ApiKey(id={self.id}, name={self.name}, active={self.is_active})>"
+
+
+class UserSetting(Base):
+    """UserSetting model - per-user dashboard preferences."""
+    __tablename__ = "user_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(255), unique=True, nullable=False, index=True)
+    theme = Column(String(20), default="light")
+    notifications_enabled = Column(Boolean, default=True)
+    email_alerts = Column(Boolean, default=True)
+    scan_frequency = Column(String(20), default="daily")
+    export_format = Column(String(20), default="json")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self) -> str:
+        return f"<UserSetting(id={self.id}, user_id={self.user_id})>"
+
+
+class AuditLog(Base):
+    """AuditLog model - persistent record of security audit events."""
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user = Column(String(255), nullable=True, index=True)
+    event = Column(String(100), nullable=False, index=True)
+    resource_type = Column(String(100), nullable=True)
+    resource_id = Column(String(255), nullable=True)
+    status = Column(String(20), default="success")
+    details = Column(Text, nullable=True)  # JSON-encoded details
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def __repr__(self) -> str:
+        return f"<AuditLog(id={self.id}, event={self.event}, user={self.user})>"

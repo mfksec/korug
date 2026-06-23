@@ -1,5 +1,16 @@
 """Package initialization for models."""
-from korug.models.base import Base, User, Domain, Subdomain, Vulnerability, ScanHistory
+from korug.models.base import (
+    Base,
+    User,
+    Domain,
+    Subdomain,
+    Vulnerability,
+    ScanHistory,
+    Alert,
+    ApiKey,
+    UserSetting,
+    AuditLog,
+)
 from korug.models.schemas import (
     DomainCreate,
     DomainUpdate,
@@ -22,6 +33,10 @@ __all__ = [
     "Subdomain",
     "Vulnerability",
     "ScanHistory",
+    "Alert",
+    "ApiKey",
+    "UserSetting",
+    "AuditLog",
     "UserCreate",
     "UserResponse",
     "DomainCreate",

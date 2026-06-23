@@ -63,9 +63,57 @@ def log_audit_event(
         "status": status,
         "details": details or {},
     }
-    
+
     # Log as JSON for structured logging
     logger.info(json.dumps(audit_entry))
+
+    # Persist to the database so the dashboard can surface real audit history.
+    _persist_audit_event(
+        event=event.value,
+        user=user or "anonymous",
+        resource_type=resource_type,
+        resource_id=resource_id,
+        status=status,
+        details=details or {},
+    )
+
+
+def _persist_audit_event(
+    event: str,
+    user: str,
+    resource_type: Optional[str],
+    resource_id: Optional[Any],
+    status: str,
+    details: dict,
+) -> None:
+    """Best-effort persistence of an audit event to the database.
+
+    Uses its own short-lived session so it can be called from any context
+    (auth flows, background tasks, request handlers) without threading a
+    session through every call site. Failures are swallowed so audit logging
+    never breaks the primary operation.
+    """
+    try:
+        # Imported lazily to avoid import-time coupling with the DB layer.
+        from korug.db import SessionLocal
+        from korug.models import AuditLog
+
+        db = SessionLocal()
+        try:
+            entry = AuditLog(
+                user=user,
+                event=event,
+                resource_type=resource_type,
+                resource_id=str(resource_id) if resource_id is not None else None,
+                status=status,
+                details=json.dumps(details) if details else None,
+            )
+            db.add(entry)
+            db.commit()
+        finally:
+            db.close()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug(f"Could not persist audit event to DB: {exc}")
 
 
 def setup_audit_logger(log_file: str = "audit.log") -> None:

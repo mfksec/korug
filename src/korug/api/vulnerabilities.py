@@ -137,50 +137,26 @@ def get_vulnerability_stats(
     }
     """
     all_vulns = db.query(Vulnerability).all()
-    
-    if not all_vulns:
-        # Return mock data for demo
-        return {
-            "total": 42,
-            "critical": 8,
-            "high": 15,
-            "medium": 12,
-            "low": 7,
-            "avg_confidence": 78.5,
-            "by_type": {
-                "XSS": 12,
-                "SQLi": 10,
-                "CSRF": 8,
-                "RCE": 7,
-                "Other": 5,
-            }
-        }
-    
-    stats = {
-        "total": len(all_vulns),
-        "critical": len([v for v in all_vulns if hasattr(v, 'confidence_score') and v.confidence_score >= 90]),
-        "high": len([v for v in all_vulns if hasattr(v, 'confidence_score') and 70 <= v.confidence_score < 90]),
-        "medium": len([v for v in all_vulns if hasattr(v, 'confidence_score') and 50 <= v.confidence_score < 70]),
-        "low": len([v for v in all_vulns if hasattr(v, 'confidence_score') and v.confidence_score < 50]),
-        "avg_confidence": sum([v.confidence_score for v in all_vulns if hasattr(v, 'confidence_score')]) / len([v for v in all_vulns if hasattr(v, 'confidence_score')]) if all_vulns else 0,
-        "by_type": {}
-    }
-    
-    # Count by type
+    total = len(all_vulns)
+
+    avg_confidence = (
+        sum(v.confidence_score for v in all_vulns) / total if total else 0.0
+    )
+
     type_counts = defaultdict(int)
     for v in all_vulns:
-        if hasattr(v, 'vuln_type') and v.vuln_type:
+        if v.vuln_type:
             type_counts[v.vuln_type] += 1
-    
-    stats["by_type"] = dict(type_counts) if type_counts else {
-        "XSS": 12,
-        "SQLi": 10,
-        "CSRF": 8,
-        "RCE": 7,
-        "Other": 5,
+
+    return {
+        "total": total,
+        "critical": len([v for v in all_vulns if v.confidence_score >= 90]),
+        "high": len([v for v in all_vulns if 70 <= v.confidence_score < 90]),
+        "medium": len([v for v in all_vulns if 50 <= v.confidence_score < 70]),
+        "low": len([v for v in all_vulns if v.confidence_score < 50]),
+        "avg_confidence": round(avg_confidence, 1),
+        "by_type": dict(type_counts),
     }
-    
-    return stats
 
 
 @router.get("/stats/timeline")
@@ -193,38 +169,23 @@ def get_vulnerability_timeline(
     
     Returns: [{date: "YYYY-MM-DD", count: int}, ...]
     """
+    now = datetime.utcnow()
+
+    # Count real vulnerabilities discovered per day within the window.
+    date_counts = defaultdict(int)
+    vulns = db.query(Vulnerability).filter(
+        Vulnerability.found_at >= now - timedelta(days=days)
+    ).all()
+    for v in vulns:
+        if v.found_at:
+            date_counts[v.found_at.date().isoformat()] += 1
+
+    # Emit one entry per day so the chart has a continuous x-axis (zeros included).
     timeline = []
-    now = datetime.now()
-    
-    # Generate mock timeline
     for i in range(days):
-        date = (now - timedelta(days=days-i-1)).date()
-        # Simulate realistic daily counts
-        count = max(0, (i % 7) * 2 + (i // 7))  # Progressive with weekly pattern
-        timeline.append({
-            "date": date.isoformat(),
-            "count": count
-        })
-    
-    # Try to use real data if available
-    try:
-        vulns = db.query(Vulnerability).filter(
-            Vulnerability.found_at >= now - timedelta(days=days)
-        ).all() if hasattr(Vulnerability, 'found_at') else []
-        
-        if vulns:
-            date_counts = defaultdict(int)
-            for v in vulns:
-                if hasattr(v, 'found_at') and v.found_at:
-                    date_key = v.found_at.date().isoformat()
-                    date_counts[date_key] += 1
-            
-            # Merge with timeline
-            for entry in timeline:
-                entry["count"] = date_counts.get(entry["date"], entry["count"])
-    except Exception:
-        pass  # Use mock data
-    
+        date = (now - timedelta(days=days - i - 1)).date().isoformat()
+        timeline.append({"date": date, "count": date_counts.get(date, 0)})
+
     return timeline
 
 
@@ -241,21 +202,12 @@ def get_confidence_distribution(
     ]
     """
     all_vulns = db.query(Vulnerability).all()
-    
-    if not all_vulns:
-        # Mock data
-        return [
-            {"severity": "critical", "score_range": "90-100", "count": 8, "percentage": 19},
-            {"severity": "high", "score_range": "70-89", "count": 15, "percentage": 36},
-            {"severity": "medium", "score_range": "50-69", "count": 12, "percentage": 29},
-            {"severity": "low", "score_range": "0-49", "count": 7, "percentage": 17},
-        ]
-    
-    critical = len([v for v in all_vulns if hasattr(v, 'confidence_score') and v.confidence_score >= 90])
-    high = len([v for v in all_vulns if hasattr(v, 'confidence_score') and 70 <= v.confidence_score < 90])
-    medium = len([v for v in all_vulns if hasattr(v, 'confidence_score') and 50 <= v.confidence_score < 70])
-    low = len([v for v in all_vulns if hasattr(v, 'confidence_score') and v.confidence_score < 50])
-    
+
+    critical = len([v for v in all_vulns if v.confidence_score >= 90])
+    high = len([v for v in all_vulns if 70 <= v.confidence_score < 90])
+    medium = len([v for v in all_vulns if 50 <= v.confidence_score < 70])
+    low = len([v for v in all_vulns if v.confidence_score < 50])
+
     total = len(all_vulns)
     
     return [
