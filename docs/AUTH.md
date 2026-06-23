@@ -1,6 +1,6 @@
 # Authentication & User Management
 
-Subdomain Hunter uses a **multi-layer authentication system** to protect your data:
+Körüg uses a **multi-layer authentication system** to protect your data:
 
 ## 🔐 Authentication Methods
 
@@ -72,7 +72,7 @@ Authorization: Bearer YOUR_API_KEY
 
 **Via CLI (Recommended for local setup):**
 ```bash
-subdomain-hunter create-user
+korug create-user
 # Prompts for username, email, password, role
 ```
 
@@ -90,16 +90,16 @@ Navigate to Settings → User Management (admin only)
 
 ```bash
 # Create a new user
-subdomain-hunter create-user
+korug create-user
 
 # List all users
-subdomain-hunter list-users
+korug list-users
 
 # Delete a user
-subdomain-hunter delete-user
+korug delete-user
 
 # Change password
-subdomain-hunter change-password
+korug change-password
 ```
 
 ---
@@ -113,7 +113,7 @@ When you start the application for the first time, an **admin account is automat
 **Environment Variables** (see `docker/.env.docker`):
 ```bash
 ADMIN_USERNAME=admin
-ADMIN_EMAIL=admin@subdomain-hunter.local
+ADMIN_EMAIL=admin@korug.local
 ADMIN_PASSWORD=  # Leave empty for auto-generated password (logged on first run)
 ```
 
@@ -131,16 +131,16 @@ Store this now and change it after first login.
 
 ```bash
 # Set environment variables
-export DATABASE_URL="postgresql://user:password@localhost:5432/subdomain_hunter"
+export DATABASE_URL="postgresql://user:password@localhost:5432/korug"
 export JWT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 export API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 export ALLOWED_ORIGINS="http://localhost:3000,http://localhost:8000"
 
 # Start the app
-python -m subdomain_hunter.run
+python -m korug.run
 
 # In another terminal, create a user
-subdomain-hunter create-user
+korug create-user
 # Enter: username, email, password, role
 ```
 
@@ -280,7 +280,7 @@ GET    /docs                       [Swagger UI (no auth)]
 ### "Invalid username or password" on login
 - ✅ Check username/email spelling
 - ✅ Verify password (spaces, caps, special chars)
-- ✅ Confirm user account exists: `subdomain-hunter list-users`
+- ✅ Confirm user account exists: `korug list-users`
 
 ### "Token has expired" error
 - ✅ Use the refresh endpoint to get a new access token

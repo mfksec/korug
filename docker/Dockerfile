@@ -41,11 +41,11 @@ COPY src/ /app/src/
 ENV PYTHONPATH=/app/src:$PYTHONPATH
 
 # Create a non-root user
-RUN useradd -m -u 1000 subdomain_hunter && \
-    chown -R subdomain_hunter:subdomain_hunter /app
+RUN useradd -m -u 1000 korug && \
+    chown -R korug:korug /app
 
-USER subdomain_hunter
+USER korug
 
 EXPOSE 8000
 
-CMD ["python", "-m", "subdomain_hunter.run"]
+CMD ["python", "-m", "korug.run"]

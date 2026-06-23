@@ -16,19 +16,19 @@ from slowapi.errors import RateLimitExceeded
 from limits import parse as parse_rate_limit
 from sqlalchemy.orm import Session
 
-from subdomain_hunter.config import get_settings
-from subdomain_hunter.db import init_db, get_db, SessionLocal
-from subdomain_hunter.audit import setup_audit_logger, log_audit_event, AuditEvent
-from subdomain_hunter.api import domains, vulnerabilities, scans, export, alerts, settings
-from subdomain_hunter.auth_utils import (
+from korug.config import get_settings
+from korug.db import init_db, get_db, SessionLocal
+from korug.audit import setup_audit_logger, log_audit_event, AuditEvent
+from korug.api import domains, vulnerabilities, scans, export, alerts, settings
+from korug.auth_utils import (
     create_access_token,
     create_refresh_token,
     verify_token,
     get_current_user,
 )
-from subdomain_hunter.models import UserResponse
-from subdomain_hunter.users import authenticate_user, get_user_by_username, record_login, seed_admin_user
-from subdomain_hunter.token_blacklist import add_to_blacklist, is_blacklisted
+from korug.models import UserResponse
+from korug.users import authenticate_user, get_user_by_username, record_login, seed_admin_user
+from korug.token_blacklist import add_to_blacklist, is_blacklisted
 
 logger = logging.getLogger(__name__)
 app_settings = get_settings()
@@ -54,7 +54,7 @@ class RefreshTokenRequest(BaseModel):
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
-    logger.info("Starting up Subdomain Hunter...")
+    logger.info("Starting up Körüg...")
     
     # Initialize audit logging
     setup_audit_logger("audit.log")
@@ -78,14 +78,14 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    logger.info("Shutting down Subdomain Hunter...")
+    logger.info("Shutting down Körüg...")
     # scheduler.shutdown()
 
 
 def create_app() -> FastAPI:
     """Create and configure FastAPI application."""
     app = FastAPI(
-        title="Subdomain Hunter",
+        title="Körüg",
         description="A comprehensive subdomain security monitoring tool",
         version="0.1.0",
         lifespan=lifespan,

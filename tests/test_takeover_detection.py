@@ -2,7 +2,7 @@
 import pytest
 import json
 from unittest.mock import patch, MagicMock
-from subdomain_hunter.services.takeover_detection import TakeoverDetector
+from korug.services.takeover_detection import TakeoverDetector
 
 
 @pytest.fixture

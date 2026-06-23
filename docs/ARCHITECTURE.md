@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Subdomain Hunter                         │
+│                    Körüg                         │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -45,7 +45,7 @@
 ## Components
 
 ### 1. Discovery Service
-**File**: `src/subdomain_hunter/services/discovery.py`
+**File**: `src/korug/services/discovery.py`
 
 Discovers subdomains using multiple passive sources:
 - **Subfinder**: Fast enumeration from multiple sources
@@ -60,7 +60,7 @@ Features:
 - Deduplication across sources
 
 ### 2. Takeover Detection Service
-**File**: `src/subdomain_hunter/services/takeover_detection.py`
+**File**: `src/korug/services/takeover_detection.py`
 
 Detects subdomain takeover vulnerabilities:
 
@@ -81,7 +81,7 @@ Detects subdomain takeover vulnerabilities:
 All findings include confidence scores (0-100%). Only findings ≥75% (configurable) trigger alerts.
 
 ### 3. Slack Integration Service
-**File**: `src/subdomain_hunter/services/slack_integration.py`
+**File**: `src/korug/services/slack_integration.py`
 
 Sends notifications to Slack:
 - Vulnerability alerts with details
@@ -90,7 +90,7 @@ Sends notifications to Slack:
 - Color-coded by severity
 
 ### 4. Data Models
-**File**: `src/subdomain_hunter/models/base.py`
+**File**: `src/korug/models/base.py`
 
 Four main models:
 
@@ -147,7 +147,7 @@ Four main models:
 ```
 
 ### 5. API Layer
-**Files**: `src/subdomain_hunter/api/*.py`
+**Files**: `src/korug/api/*.py`
 
 RESTful endpoints:
 - `domains.py`: Domain CRUD operations
@@ -162,7 +162,7 @@ Features:
 - Background task support for async operations
 
 ### 6. CLI Tool
-**File**: `src/subdomain_hunter/cli.py`
+**File**: `src/korug/cli.py`
 
 Commands using Click framework:
 - `add-domain`, `remove-domain`, `list-domains`
@@ -170,7 +170,7 @@ Commands using Click framework:
 - `config-slack`, `init-database`
 
 ### 7. Task Scheduler
-**File**: `src/subdomain_hunter/scheduler.py`
+**File**: `src/korug/scheduler.py`
 
 APScheduler integration:
 - Daily scheduled scans at configurable time

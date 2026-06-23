@@ -43,7 +43,7 @@ export const LoginPage: React.FC<LoginPageProps> = () => {
         <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
           <Box sx={{ textAlign: 'center', mb: 3 }}>
             <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-              🔍 Subdomain Hunter
+              🔍 Körüg
             </Typography>
             <Typography variant="body2" color="textSecondary">
               Security Monitoring Dashboard

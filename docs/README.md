@@ -1,6 +1,6 @@
 # Overview
 
-This directory contains the core documentation for Subdomain Hunter.
+This directory contains the core documentation for Körüg.
 
 ## Getting Started
 
@@ -8,7 +8,7 @@ This directory contains the core documentation for Subdomain Hunter.
 2. **[Installation Guide](INSTALLATION.md)** - Detailed setup instructions
 3. **[Authentication & Users](AUTH.md)** - Login, user management, security
 
-## Using Subdomain Hunter
+## Using Körüg
 
 - **[User Guide](USER_GUIDE.md)** - Dashboard features and workflows
 - **[API Reference](API.md)** - REST API endpoints with examples

@@ -50,7 +50,7 @@ export const Navbar: React.FC = () => {
           sx={{ flexGrow: 1, fontWeight: 'bold', cursor: 'pointer' }}
           onClick={() => navigate('/dashboard')}
         >
-          🔍 Subdomain Hunter
+          🔍 Körüg
         </Typography>
 
         {/* Navigation Links */}

@@ -1,6 +1,6 @@
 """Package initialization for models."""
-from subdomain_hunter.models.base import Base, User, Domain, Subdomain, Vulnerability, ScanHistory
-from subdomain_hunter.models.schemas import (
+from korug.models.base import Base, User, Domain, Subdomain, Vulnerability, ScanHistory
+from korug.models.schemas import (
     DomainCreate,
     DomainUpdate,
     DomainResponse,

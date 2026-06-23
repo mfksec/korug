@@ -1,4 +1,4 @@
-"""Basic tests for subdomain_hunter."""
+"""Basic tests for korug."""
 import json
 from datetime import datetime
 

@@ -8,10 +8,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 
-from subdomain_hunter.config import get_settings
-from subdomain_hunter.db import get_db
-from subdomain_hunter.models import User
-from subdomain_hunter.token_blacklist import is_blacklisted
+from korug.config import get_settings
+from korug.db import get_db
+from korug.models import User
+from korug.token_blacklist import is_blacklisted
 
 settings = get_settings()
 security = HTTPBearer()

@@ -6,7 +6,7 @@ from typing import Optional, Set
 import aiohttp
 import asyncio
 
-from subdomain_hunter.config import get_settings
+from korug.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
