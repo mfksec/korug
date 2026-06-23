@@ -48,6 +48,9 @@ docker compose -f docker/docker-compose.yml up -d
 
 Dashboard: http://localhost:3000 | API docs: http://localhost:8000/docs
 
+On first run an initial `admin` account is created. If `ADMIN_PASSWORD` is not set, a strong random password is generated and printed to the logs once — capture it and change it after logging in.
+
+> Configure secrets via environment variables, never in committed files. See [.env.example](.env.example) for all options. Slack and email notifications are configured at runtime from the dashboard's **Integrations** page.
 
 # Documentation
 
