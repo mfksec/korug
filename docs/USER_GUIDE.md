@@ -9,7 +9,15 @@ Open the dashboard, sign in with your username and password. First-time admin cr
 ## Pages
 
 ### Dashboard
-At-a-glance stat cards — total domains, vulnerabilities, active scans, high-risk domains — plus the **Monitored Domains** table. Add a domain with **Add Domain**; remove one with the delete icon. Scans are run from the CLI or on the schedule (see below).
+At-a-glance stat cards — total domains, vulnerabilities, active scans, high-risk domains — plus the **Monitored Domains** table. Each row has actions:
+- **Run scan** ▶ — opens a dialog with an optional *Include port scan (active)* toggle, then starts the scan.
+- **View results** 👁 — opens the domain detail view.
+- **Edit** ✏️ — rename the domain or enable/disable it (disabled domains are skipped by scheduled scans).
+- **Delete** 🗑 — remove the domain and its results.
+
+Add a domain with **Add Domain**.
+
+**Domain detail** shows summary counts (subdomains / alive / vulnerabilities / Cloudflare) and three tabs: **Subdomains** (resolved IPs, HTTP status, title/server, technology chips, open ports with service/version, a Cloudflare badge, and a clickable live URL), **By IP** (subdomains grouped by shared address), and **Vulnerabilities**.
 
 ### Vulnerabilities
 Analytics computed from your real scans, across four tabs:
@@ -40,7 +48,11 @@ A record of security-relevant actions (logins, domain and user changes, scans, e
 
 ## Running scans
 
-Scans run automatically on the daily schedule (`SCAN_SCHEDULE_HOUR`/`MINUTE`). To run one now, use the CLI (`korug scan --domain example.com`) or the API (`POST /api/scans/{id}/scan`). A scan discovers subdomains, resolves DNS, scores takeover risk, stores results, raises alerts, and sends Slack/email notifications when enabled.
+Run a scan from the dashboard (**Run scan** ▶), the CLI (`korug scan --domain example.com`), the API (`POST /api/scans/{id}/scan`, add `?port_scan=true` to include a port scan), or the daily schedule (`SCAN_SCHEDULE_HOUR`/`MINUTE`).
+
+A scan: aggregates subdomains from all configured sources → resolves DNS and groups by IP → probes HTTP(S) (status/title/server, https→http fallback) → fingerprints technologies and flags Cloudflare → optionally port-scans → tests for takeover → stores results, raises alerts, and sends Slack/email notifications when enabled.
+
+> **Port scanning is active.** It's off by default and opt-in per scan — only enable it for targets you're authorized to scan.
 
 ## Vulnerability types
 
