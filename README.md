@@ -43,8 +43,10 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 git clone https://github.com/mfksec/korug.git
 cd korug
 cp .env.example .env        # set DATABASE_URL, JWT_SECRET_KEY, API_KEY, ALLOWED_ORIGINS
-docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml up -d --build
 ```
+
+> Use `--build` (and `--build` again when updating) so Docker doesn't reuse a stale cached image.
 
 Dashboard: http://localhost:3000 | API docs: http://localhost:8000/docs
 
