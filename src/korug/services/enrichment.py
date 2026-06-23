@@ -9,6 +9,8 @@ import asyncio
 import ipaddress
 import logging
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -38,6 +40,34 @@ def is_cloudflare_ip(ip: str) -> bool:
     except ValueError:
         return False
     return any(addr in net for net in _CLOUDFLARE_NETS)
+
+
+def _parse_nmap_xml(xml_str: str) -> List[dict]:
+    """Parse nmap -oX output into a list of open-port dicts."""
+    ports: List[dict] = []
+    if not xml_str:
+        return ports
+    try:
+        # defusedxml guards against XXE / billion-laughs in untrusted XML.
+        from defusedxml.ElementTree import fromstring
+        root = fromstring(xml_str)
+    except Exception:
+        return ports
+    for port in root.findall(".//host/ports/port"):
+        state = port.find("state")
+        if state is None or state.get("state") != "open":
+            continue
+        entry = {"port": int(port.get("portid")), "proto": port.get("protocol")}
+        svc = port.find("service")
+        if svc is not None:
+            if svc.get("name"):
+                entry["service"] = svc.get("name")
+            if svc.get("product"):
+                entry["product"] = svc.get("product")
+            if svc.get("version"):
+                entry["version"] = svc.get("version")
+        ports.append(entry)
+    return sorted(ports, key=lambda d: d["port"])
 
 
 def detect_technologies(headers: dict, body: str) -> List[str]:
@@ -78,7 +108,7 @@ class EnrichResult:
     content_length: Optional[int] = None
     web_server: Optional[str] = None
     technologies: List[str] = field(default_factory=list)
-    open_ports: List[int] = field(default_factory=list)
+    open_ports: List[dict] = field(default_factory=list)  # [{port, service?, product?, version?}]
     is_cloudflare: bool = False
 
     def resolved(self) -> bool:
@@ -94,7 +124,9 @@ class EnrichmentService:
         self.http_timeout = settings.http_probe_timeout
         self.ports = [int(p) for p in str(settings.port_scan_ports).split(",") if p.strip().isdigit()]
 
-    async def enrich(self, names: List[str]) -> Dict[str, EnrichResult]:
+    async def enrich(self, names: List[str], port_scan: Optional[bool] = None) -> Dict[str, EnrichResult]:
+        """Enrich names. ``port_scan`` overrides the configured default when set."""
+        do_ports = settings.enable_port_scan if port_scan is None else port_scan
         sem = asyncio.Semaphore(self.concurrency)
         timeout = aiohttp.ClientTimeout(total=self.http_timeout)
         connector = aiohttp.TCPConnector(ssl=False, limit=self.concurrency)
@@ -102,11 +134,11 @@ class EnrichmentService:
                                          headers={"User-Agent": "korug-recon/1.0"}) as session:
             async def run(name: str):
                 async with sem:
-                    return name, await self._enrich_one(session, name)
+                    return name, await self._enrich_one(session, name, do_ports)
             pairs = await asyncio.gather(*(run(n) for n in names))
         return dict(pairs)
 
-    async def _enrich_one(self, session, name: str) -> EnrichResult:
+    async def _enrich_one(self, session, name: str, do_ports: bool) -> EnrichResult:
         result = EnrichResult()
         result.dns_records = await asyncio.to_thread(self._resolve, name)
         result.resolved_ips = list(result.dns_records["A"])
@@ -118,7 +150,7 @@ class EnrichmentService:
         if settings.enable_http_probe:
             await self._probe(session, name, result)
 
-        if settings.enable_port_scan and result.resolved_ips:
+        if do_ports and result.resolved_ips:
             result.open_ports = await self._scan_ports(result.resolved_ips[0])
 
         return result
@@ -166,22 +198,43 @@ class EnrichmentService:
             except Exception:
                 continue  # try next scheme (smart https->http fallback)
 
-    async def _scan_ports(self, host: str) -> List[int]:
-        async def check(port: int) -> Optional[int]:
+    async def _scan_ports(self, host: str) -> List[dict]:
+        """Port scan a host. Prefer nmap (service/version), else async TCP connect.
+
+        Returns a list of dicts: {port, service?, product?, version?}.
+        """
+        if shutil.which(settings.nmap_path):
+            try:
+                return await asyncio.to_thread(self._nmap_scan, host)
+            except Exception as e:
+                logger.warning("nmap scan failed for %s (%s); using TCP fallback", host, e)
+        return await self._tcp_connect_scan(host)
+
+    def _nmap_scan(self, host: str) -> List[dict]:
+        ports = ",".join(str(p) for p in self.ports)
+        cmd = [settings.nmap_path, "-Pn", "--open", "-T4", "-p", ports]
+        if settings.nmap_service_detection:
+            cmd.append("-sV")
+        cmd += ["-oX", "-", host]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        return _parse_nmap_xml(proc.stdout)
+
+    async def _tcp_connect_scan(self, host: str) -> List[dict]:
+        async def check(port: int) -> Optional[dict]:
             try:
                 fut = asyncio.open_connection(host, port)
-                reader, writer = await asyncio.wait_for(fut, timeout=2)
+                _, writer = await asyncio.wait_for(fut, timeout=2)
                 writer.close()
                 try:
                     await writer.wait_closed()
                 except Exception:
                     pass
-                return port
+                return {"port": port}
             except Exception:
                 return None
 
         results = await asyncio.gather(*(check(p) for p in self.ports))
-        return sorted(p for p in results if p is not None)
+        return [r for r in sorted((x for x in results if x), key=lambda d: d["port"])]
 
 
 enrichment_service = EnrichmentService()

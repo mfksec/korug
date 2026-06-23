@@ -14,9 +14,17 @@ export interface EnrichedSubdomain {
   content_length: number | null
   web_server: string | null
   technologies: string[]
-  open_ports: number[]
+  open_ports: OpenPort[]
   is_cloudflare: boolean
   first_discovered: string | null
+}
+
+export interface OpenPort {
+  port: number
+  proto?: string
+  service?: string
+  product?: string
+  version?: string
 }
 
 export interface ScanVulnerability {
@@ -52,8 +60,9 @@ export interface ScanResults {
 }
 
 export const scanAPI = {
-  triggerScan: async (domain_id: number) => {
-    const response = await client.post(`/api/scans/${domain_id}/scan`)
+  triggerScan: async (domain_id: number, portScan?: boolean) => {
+    const params = portScan === undefined ? {} : { port_scan: portScan }
+    const response = await client.post(`/api/scans/${domain_id}/scan`, null, { params })
     return response.data
   },
 

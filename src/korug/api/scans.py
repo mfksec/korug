@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 
 from korug.db import get_db
@@ -49,8 +49,11 @@ def _alert_message(subdomain: str, vuln_type: str, details: str | None) -> str:
     return f"{subdomain}: {summary}"
 
 
-async def perform_scan(domain_id: int, db: Session):
-    """Background task to perform a domain scan."""
+async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = None):
+    """Background task to perform a domain scan.
+
+    ``port_scan`` overrides the configured default for this run (UI opt-in).
+    """
     try:
         domain = db.query(Domain).filter(Domain.id == domain_id).first()
         if not domain:
@@ -72,7 +75,7 @@ async def perform_scan(domain_id: int, db: Session):
             names = list(found.keys())
 
             # 2. Enrich: DNS resolution, HTTP probe, Cloudflare, ports
-            enriched = await enrichment_service.enrich(names)
+            enriched = await enrichment_service.enrich(names, port_scan=port_scan)
 
             new_subdomains = 0
             vulnerabilities_found = 0
@@ -191,30 +194,31 @@ async def perform_scan(domain_id: int, db: Session):
 
 @router.post("/{domain_id}/scan")
 def trigger_scan(
-    domain_id: int, 
-    background_tasks: BackgroundTasks, 
+    domain_id: int,
+    background_tasks: BackgroundTasks,
+    port_scan: bool | None = Query(None, description="Override the port-scan default for this run"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    """Trigger a scan for a domain."""
+    """Trigger a scan for a domain. Set ?port_scan=true to include a port scan."""
     domain = db.query(Domain).filter(Domain.id == domain_id).first()
     if not domain:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Domain with id {domain_id} not found",
         )
-    
+
     log_audit_event(
         AuditEvent.SCAN_TRIGGERED,
         user=current_user['sub'],
         resource_type="domain",
         resource_id=domain_id,
-        details={"domain_name": domain.domain_name}
+        details={"domain_name": domain.domain_name, "port_scan": bool(port_scan)}
     )
-    
+
     # Add scan task to background
-    background_tasks.add_task(perform_scan, domain_id, db)
-    
+    background_tasks.add_task(perform_scan, domain_id, db, port_scan)
+
     return {"message": f"Scan started for {domain.domain_name}", "domain_id": domain_id}
 
 

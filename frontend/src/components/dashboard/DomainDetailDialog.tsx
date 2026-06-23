@@ -16,6 +16,17 @@ interface Props {
   onClose: () => void
 }
 
+/** Only treat http(s) URLs as safe link targets (blocks javascript:/data: schemes). */
+const safeHref = (url: string | null): string | null => {
+  if (!url) return null
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? url : null
+  } catch {
+    return null
+  }
+}
+
 const Stat: React.FC<{ label: string; value: number | string }> = ({ label, value }) => (
   <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', borderRadius: 2 }}>
     <Typography variant="h5" sx={{ fontWeight: 700 }}>{value}</Typography>
@@ -102,8 +113,8 @@ export const DomainDetailDialog: React.FC<Props> = ({ domainId, domainName, open
                       <TableRow key={s.id} hover>
                         <TableCell>
                           <Stack direction="row" spacing={0.5} alignItems="center">
-                            {s.final_url
-                              ? <Link href={s.final_url} target="_blank" rel="noreferrer" underline="hover">{s.subdomain}</Link>
+                            {safeHref(s.final_url)
+                              ? <Link href={safeHref(s.final_url)!} target="_blank" rel="noopener noreferrer" underline="hover">{s.subdomain}</Link>
                               : s.subdomain}
                             {s.is_cloudflare && (
                               <Tooltip title="Behind Cloudflare"><CloudIcon sx={{ fontSize: 15, color: 'warning.main' }} /></Tooltip>
@@ -127,7 +138,18 @@ export const DomainDetailDialog: React.FC<Props> = ({ domainId, domainName, open
                             {s.technologies.slice(0, 4).map((t) => <Chip key={t} size="small" variant="outlined" label={t} />)}
                           </Stack>
                         </TableCell>
-                        <TableCell sx={{ fontSize: '0.8rem' }}>{s.open_ports.join(', ') || '—'}</TableCell>
+                        <TableCell sx={{ maxWidth: 170 }}>
+                          {s.open_ports.length === 0 ? '—' : (
+                            <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
+                              {s.open_ports.map((p) => (
+                                <Tooltip key={p.port} title={[p.service, p.product, p.version].filter(Boolean).join(' ') || ''}>
+                                  <Chip size="small" variant="outlined"
+                                        label={p.service ? `${p.port}/${p.service}` : `${p.port}`} />
+                                </Tooltip>
+                              ))}
+                            </Stack>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
