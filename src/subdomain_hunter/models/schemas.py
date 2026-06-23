@@ -4,6 +4,27 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 
+# User / Auth Schemas
+class UserCreate(BaseModel):
+    username: str = Field(..., min_length=3, max_length=64)
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=8, max_length=128)
+    role: str = Field(default="admin", max_length=32)
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    role: str
+    is_active: bool
+    created_at: datetime
+    last_login: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # Domain Schemas
 class DomainCreate(BaseModel):
     domain_name: str = Field(..., min_length=1, max_length=255)

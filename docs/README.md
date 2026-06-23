@@ -4,23 +4,30 @@ This directory contains the core documentation for Subdomain Hunter.
 
 ## Getting Started
 
-1. **[Installation Guide](INSTALLATION.md)** - Setup instructions for Docker and local development
-2. **[Quick Tutorial](../docs/INSTALLATION.md#quick-start)** - Get running in 5 minutes
-3. **[Configuration](../CONTRIBUTING.md)** - Environment setup
+1. **[Quick Start Guide](QUICKSTART.md)** - Get running in 5 minutes
+2. **[Installation Guide](INSTALLATION.md)** - Detailed setup instructions
+3. **[Authentication & Users](AUTH.md)** - Login, user management, security
 
 ## Using Subdomain Hunter
 
+- **[User Guide](USER_GUIDE.md)** - Dashboard features and workflows
 - **[API Reference](API.md)** - REST API endpoints with examples
 - **[CLI Reference](CLI.md)** - Command-line tool documentation
 - **[Architecture](ARCHITECTURE.md)** - System design and components
 
-## Contributing & Support
+## Security & Operations
 
+- **[Security Policy](../SECURITY.md)** - Reporting vulnerabilities & best practices
 - **[Contributing Guide](../CONTRIBUTING.md)** - How to contribute
-- **[Security Policy](../SECURITY.md)** - Reporting vulnerabilities
 - **[Changelog](../CHANGELOG.md)** - Release history
 
 ## Key Concepts
+
+### Authentication
+Two authentication methods supported:
+- **User JWT Tokens**: Login with username/password for dashboard and API access
+- **API Keys**: Service-to-service authentication for scripts and integrations
+- See [Authentication & Users](AUTH.md) for complete details
 
 ### Discovery Process
 Subdomains are discovered using multiple passive sources:

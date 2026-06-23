@@ -6,12 +6,99 @@ http://localhost:8000
 ```
 
 ## Authentication
-Include API key in request headers:
+
+Subdomain Hunter supports **two authentication methods**:
+
+### 1. **User Authentication** (JWT Tokens)
+For dashboard users and most API clients.
+
+**Get a token:**
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "your_password"
+}
 ```
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+**Use the access token:**
+```http
+GET /api/domains/
+Authorization: Bearer <access_token>
+```
+
+**Refresh the token (when expired):**
+```http
+POST /api/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "<refresh_token>"
+}
+```
+
+### 2. **API Key Authentication**
+For service-to-service integrations and scripts.
+
+**Include API key in headers:**
+```http
+GET /api/domains/
 Authorization: Bearer YOUR_API_KEY
 ```
 
+**Note**: API key is the same `API_KEY` environment variable used for the backend.
+
+---
+
+**For full authentication details**, see [Authentication & User Management](AUTH.md).
+
 ## Endpoints
+
+### Authentication
+
+#### Login
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "password"
+}
+```
+
+#### Get Current User
+```http
+GET /api/auth/me
+Authorization: Bearer <access_token>
+```
+
+#### Refresh Token
+```http
+POST /api/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "<refresh_token>"
+}
+```
+
+#### Logout
+```http
+POST /api/auth/logout
+Authorization: Bearer <access_token>
+```
 
 ### Domains
 
@@ -19,7 +106,7 @@ Authorization: Bearer YOUR_API_KEY
 ```http
 POST /api/domains/
 Content-Type: application/json
-Authorization: Bearer YOUR_API_KEY
+Authorization: Bearer <access_token>
 
 {
   "domain_name": "example.com"
@@ -41,20 +128,20 @@ Response:
 #### List Domains
 ```http
 GET /api/domains/?skip=0&limit=100
-Authorization: Bearer YOUR_API_KEY
+Authorization: Bearer <access_token>
 ```
 
 #### Get Domain
 ```http
 GET /api/domains/1
-Authorization: Bearer YOUR_API_KEY
+Authorization: Bearer <access_token>
 ```
 
 #### Update Domain
 ```http
 PUT /api/domains/1
 Content-Type: application/json
-Authorization: Bearer YOUR_API_KEY
+Authorization: Bearer <access_token>
 
 {
   "enabled": false
@@ -64,7 +151,7 @@ Authorization: Bearer YOUR_API_KEY
 #### Delete Domain
 ```http
 DELETE /api/domains/1
-Authorization: Bearer YOUR_API_KEY
+Authorization: Bearer <access_token>
 ```
 
 ### Scanning
@@ -72,7 +159,7 @@ Authorization: Bearer YOUR_API_KEY
 #### Trigger Scan
 ```http
 POST /api/scans/1/scan
-Authorization: Bearer YOUR_API_KEY
+Authorization: Bearer <access_token>
 ```
 
 Response:
