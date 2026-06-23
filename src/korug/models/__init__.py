@@ -10,6 +10,7 @@ from korug.models.base import (
     ApiKey,
     UserSetting,
     AuditLog,
+    IntegrationConfig,
 )
 from korug.models.schemas import (
     DomainCreate,
@@ -24,6 +25,13 @@ from korug.models.schemas import (
     ScanResults,
     UserCreate,
     UserResponse,
+    UserAdminUpdate,
+    ProfileUpdate,
+    PasswordChange,
+    PasswordReset,
+    SlackConfig,
+    EmailConfig,
+    IntegrationTestRequest,
 )
 
 __all__ = [
@@ -37,8 +45,16 @@ __all__ = [
     "ApiKey",
     "UserSetting",
     "AuditLog",
+    "IntegrationConfig",
     "UserCreate",
     "UserResponse",
+    "UserAdminUpdate",
+    "ProfileUpdate",
+    "PasswordChange",
+    "PasswordReset",
+    "SlackConfig",
+    "EmailConfig",
+    "IntegrationTestRequest",
     "DomainCreate",
     "DomainUpdate",
     "DomainResponse",

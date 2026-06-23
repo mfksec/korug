@@ -21,6 +21,17 @@ class AuditEvent(str, Enum):
     API_KEY_CREATED = "api_key_created"
     API_KEY_REVOKED = "api_key_revoked"
     API_KEY_DELETED = "api_key_deleted"
+
+    # User management events
+    USER_CREATED = "user_created"
+    USER_UPDATED = "user_updated"
+    USER_DELETED = "user_deleted"
+    PASSWORD_CHANGED = "password_changed"
+    PASSWORD_RESET = "password_reset"
+
+    # Integration events
+    INTEGRATION_UPDATED = "integration_updated"
+    INTEGRATION_TESTED = "integration_tested"
     
     # Data events
     DOMAIN_CREATED = "domain_created"
