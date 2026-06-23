@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # AWS
     aws_region: str = Field(default="us-east-1")
     
+    # Advanced Configuration
+    max_discovery_workers: int = Field(default=4)
+    api_timeout: int = Field(default=30)
+    max_subdomains_per_domain: int = Field(default=10000)
+    
     # Security: Rate Limiting
     enable_rate_limiting: bool = Field(default=True)
     login_rate_limit: str = Field(default="5/minute")  # Format: "requests/time_period"
