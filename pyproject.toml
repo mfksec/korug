@@ -3,7 +3,7 @@ requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "subdomain_hunter"
+name = "korug"
 version = "0.1.0"
 description = "A comprehensive subdomain security monitoring tool with vulnerability detection"
 readme = "README.md"
@@ -45,7 +45,7 @@ dev = [
 ]
 
 [project.scripts]
-subdomain-hunter = "subdomain_hunter.cli:main"
+korug = "korug.cli:main"
 
 [tool.black]
 line-length = 100

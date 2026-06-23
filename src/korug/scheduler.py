@@ -5,9 +5,9 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy.orm import Session
 
-from subdomain_hunter.config import get_settings
-from subdomain_hunter.db import SessionLocal
-from subdomain_hunter.models import Domain
+from korug.config import get_settings
+from korug.db import SessionLocal
+from korug.models import Domain
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -29,7 +29,7 @@ def scheduled_scan_task():
         for domain in domains:
             logger.info(f"Scheduling scan for {domain.domain_name}")
             # Import here to avoid circular imports
-            from subdomain_hunter.api.scans import perform_scan
+            from korug.api.scans import perform_scan
             import asyncio
             
             # Run scan asynchronously

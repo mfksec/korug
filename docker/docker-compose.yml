@@ -3,9 +3,9 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: subdomain_hunter_db
+    container_name: korug_db
     environment:
-      POSTGRES_DB: subdomain_hunter
+      POSTGRES_DB: korug
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres_password
     volumes:
@@ -18,11 +18,11 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - subdomain_hunter_network
+      - korug_network
 
   redis:
     image: redis:7-alpine
-    container_name: subdomain_hunter_redis
+    container_name: korug_redis
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -34,15 +34,15 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - subdomain_hunter_network
+      - korug_network
 
-  subdomain-hunter-api:
+  korug-api:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: subdomain_hunter_app
+    container_name: korug_app
     environment:
-      DATABASE_URL: postgresql://postgres:postgres_password@postgres:5432/subdomain_hunter
+      DATABASE_URL: postgresql://postgres:postgres_password@postgres:5432/korug
       FASTAPI_ENV: production
       FASTAPI_DEBUG: "false"
       HOST: 0.0.0.0
@@ -55,7 +55,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       # Admin User Seeding: create initial admin on first run
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@subdomain-hunter.local}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@korug.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # Optional: Configure these with your API keys
       # SHODAN_API_KEY: ${SHODAN_API_KEY}
@@ -71,34 +71,34 @@ services:
         condition: service_healthy
     volumes:
       - ./exports:/app/exports
-    command: python -m subdomain_hunter.run
+    command: python -m korug.run
     networks:
-      - subdomain_hunter_network
+      - korug_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  subdomain-hunter-ui:
+  korug-ui:
     build:
       context: ../frontend
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
-    container_name: subdomain_hunter_ui
+    container_name: korug_ui
     ports:
       - "3000:3000"
     depends_on:
-      subdomain-hunter-api:
+      korug-api:
         condition: service_healthy
     networks:
-      - subdomain_hunter_network
+      - korug_network
 
 volumes:
   postgres_data:
   redis_data:
 
 networks:
-  subdomain_hunter_network:
+  korug_network:
     driver: bridge

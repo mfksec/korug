@@ -7,7 +7,7 @@ http://localhost:8000
 
 ## Authentication
 
-Subdomain Hunter supports **two authentication methods**:
+Körüg supports **two authentication methods**:
 
 ### 1. **User Authentication** (JWT Tokens)
 For dashboard users and most API clients.

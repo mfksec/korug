@@ -1,6 +1,6 @@
-# Contributing to Subdomain Hunter
+# Contributing to Körüg
 
-First off, thank you for considering a contribution to Subdomain Hunter! It's people like you that make Subdomain Hunter such a great tool.
+First off, thank you for considering a contribution to Körüg! It's people like you that make Körüg such a great tool.
 
 ## Code of Conduct
 
@@ -65,8 +65,8 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ```bash
 # Clone the repository
-git clone https://github.com/mfksec/subdomain_hunter.git
-cd subdomain_hunter
+git clone https://github.com/mfksec/korug.git
+cd korug
 
 # Create virtual environment
 python3.11 -m venv venv
@@ -94,7 +94,7 @@ flake8 src/
 
 ```bash
 # Run tests with coverage
-pytest tests/ --cov=src/subdomain_hunter --cov-report=html
+pytest tests/ --cov=src/korug --cov-report=html
 ```
 
 ## Additional Notes

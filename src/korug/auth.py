@@ -1,7 +1,7 @@
 """API key authentication middleware."""
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthCredentials
-from subdomain_hunter.config import get_settings
+from korug.config import get_settings
 
 security = HTTPBearer(auto_error=False)
 settings = get_settings()

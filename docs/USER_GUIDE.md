@@ -1,6 +1,6 @@
-# User Guide: Subdomain Hunter Web Dashboard
+# User Guide: Körüg Web Dashboard
 
-Welcome to Subdomain Hunter! This guide will help you get the most out of the web dashboard interface.
+Welcome to Körüg! This guide will help you get the most out of the web dashboard interface.
 
 ## 📋 Table of Contents
 
@@ -248,7 +248,7 @@ To get real-time Slack alerts:
    - Create an Incoming Webhook
    - Copy the webhook URL
 
-2. In Subdomain Hunter:
+2. In Körüg:
    - Go to **Settings** (⚙️ icon)
    - Click **Integrations** tab
    - Paste the webhook URL
@@ -347,7 +347,7 @@ For enhanced discovery capabilities:
 
 **Issue**: "Cannot connect to API"
 - **Solution**: Ensure backend is running (Port 8000)
-- Backend logs: `docker logs subdomain_hunter_app`
+- Backend logs: `docker logs korug_app`
 
 **Issue**: "Scan not finding subdomains"
 - **Solution**: Check if discovery tools are installed
@@ -365,9 +365,9 @@ For enhanced discovery capabilities:
 
 ## Getting Help
 
-- 📖 [Full Documentation](https://github.com/mfksec/subdomain_hunter/docs/)
-- 🐛 [Report Issues](https://github.com/mfksec/subdomain_hunter/issues)
-- 💬 [Discussions](https://github.com/mfksec/subdomain_hunter/discussions)
+- 📖 [Full Documentation](https://github.com/mfksec/korug/docs/)
+- 🐛 [Report Issues](https://github.com/mfksec/korug/issues)
+- 💬 [Discussions](https://github.com/mfksec/korug/discussions)
 - 🔒 [Security Issues](SECURITY.md)
 
 ---

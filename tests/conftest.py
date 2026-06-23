@@ -21,10 +21,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
-from subdomain_hunter.models.base import Base
-from subdomain_hunter.models import User
-from subdomain_hunter.db import get_db
-from subdomain_hunter.auth_utils import hash_password, create_access_token, create_refresh_token
+from korug.models.base import Base
+from korug.models import User
+from korug.db import get_db
+from korug.auth_utils import hash_password, create_access_token, create_refresh_token
 
 # Use in-memory SQLite for testing
 SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test.db"
@@ -107,8 +107,8 @@ def refresh_token(test_user):
 def client(db_session, test_user, access_token):
     """Create test FastAPI client with authentication."""
     from fastapi.testclient import TestClient
-    from subdomain_hunter.main import app
-    import subdomain_hunter.token_blacklist as token_blacklist_module
+    from korug.main import app
+    import korug.token_blacklist as token_blacklist_module
 
     # Override get_db dependency
     def override_get_db():

@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get Subdomain Hunter running in minutes with this step-by-step guide.
+Get Körüg running in minutes with this step-by-step guide.
 
 ## 🐳 Docker Setup (Recommended - 5 minutes)
 
@@ -14,8 +14,8 @@ The easiest way to get everything running locally with UI + Backend + Database.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/mfksec/subdomain_hunter.git
-cd subdomain_hunter
+git clone https://github.com/mfksec/korug.git
+cd korug
 
 # 2. Start all services with one command
 docker-compose -f docker/docker-compose.yml up -d
@@ -24,7 +24,7 @@ docker-compose -f docker/docker-compose.yml up -d
 sleep 10
 
 # 4. (Optional) Add your first domain
-docker exec subdomain_hunter_app python -m subdomain_hunter.cli add-domain example.com
+docker exec korug_app python -m korug.cli add-domain example.com
 ```
 
 ### Access the Application
@@ -42,7 +42,7 @@ An admin account is automatically created on first startup. **Find the credentia
 
 ```bash
 # Check the logs for the auto-generated admin password
-docker-compose -f docker/docker-compose.yml logs subdomain-hunter-api | grep -A 5 "admin account"
+docker-compose -f docker/docker-compose.yml logs korug-api | grep -A 5 "admin account"
 
 # Output will show:
 # ========================================================================
@@ -67,7 +67,7 @@ Use these credentials to log into the dashboard at http://localhost:3000.
 docker-compose -f docker/docker-compose.yml ps
 
 # View logs
-docker-compose -f docker/docker-compose.yml logs -f subdomain-hunter-api
+docker-compose -f docker/docker-compose.yml logs -f korug-api
 
 # Stop services
 docker-compose -f docker/docker-compose.yml down
@@ -76,7 +76,7 @@ docker-compose -f docker/docker-compose.yml down
 docker-compose -f docker/docker-compose.yml down -v
 
 # Restart a service
-docker-compose -f docker/docker-compose.yml restart subdomain-hunter-api
+docker-compose -f docker/docker-compose.yml restart korug-api
 ```
 
 ---
@@ -115,10 +115,10 @@ export API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 export ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5174,http://localhost:8000"
 
 # 6. Initialize database
-python -m subdomain_hunter.cli init-database
+python -m korug.cli init-database
 
 # 7. Create an admin user
-python -m subdomain_hunter.cli create-user
+python -m korug.cli create-user
 # Interactive prompt:
 # Username: admin
 # Email: admin@localhost
@@ -126,7 +126,7 @@ python -m subdomain_hunter.cli create-user
 # Role: admin
 
 # 8. Start the API server
-python -m subdomain_hunter.run
+python -m korug.run
 ```
 
 Backend will run on `http://localhost:8000`
@@ -207,7 +207,7 @@ Once everything is running, follow these steps:
 docker-compose -f docker/docker-compose.yml ps
 
 # View API logs
-docker-compose -f docker/docker-compose.yml logs subdomain-hunter-api
+docker-compose -f docker/docker-compose.yml logs korug-api
 ```
 
 **Error: "Database connection failed"**
@@ -217,7 +217,7 @@ docker-compose -f docker/docker-compose.yml restart postgres
 
 # Wait 10 seconds and try again
 sleep 10
-docker exec subdomain_hunter_app python -m subdomain_hunter.cli init-database
+docker exec korug_app python -m korug.cli init-database
 ```
 
 **Port already in use**
@@ -273,8 +273,8 @@ cd frontend && npm run dev -- --port 3001
 
 ## 💬 Need Help?
 
-- 🐛 [Report Issues](https://github.com/mfksec/subdomain_hunter/issues)
-- 💭 [Discussions](https://github.com/mfksec/subdomain_hunter/discussions)
+- 🐛 [Report Issues](https://github.com/mfksec/korug/issues)
+- 💭 [Discussions](https://github.com/mfksec/korug/discussions)
 - 📧 [Contact](mailto:security@example.com)
 
 ---

@@ -6,7 +6,7 @@ import dns.resolver
 import dns.exception
 import boto3
 
-from subdomain_hunter.config import get_settings
+from korug.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

@@ -33,21 +33,21 @@
 4. **Update .env if needed**:
    ```bash
    VITE_API_BASE_URL=http://localhost:8000
-   VITE_APP_NAME=Subdomain Hunter
+   VITE_APP_NAME=Körüg
    ```
 
 ### Running Development Servers
 
 **Terminal 1 - Start Backend**:
 ```bash
-cd /path/to/subdomain_hunter
-python -m subdomain_hunter.run
+cd /path/to/korug
+python -m korug.run
 # Backend runs on http://localhost:8000
 ```
 
 **Terminal 2 - Start Frontend**:
 ```bash
-cd /path/to/subdomain_hunter/frontend
+cd /path/to/korug/frontend
 npm run dev
 # Frontend runs on http://localhost:5173
 ```

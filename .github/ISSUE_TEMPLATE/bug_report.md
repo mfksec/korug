@@ -25,7 +25,7 @@ What actually happened instead.
 ## Environment
 - OS: [e.g. macOS, Ubuntu 22.04]
 - Python Version: [e.g. 3.11]
-- Subdomain Hunter Version: [e.g. 0.1.0]
+- Körüg Version: [e.g. 0.1.0]
 - Docker: [Yes/No]
 
 ## Logs

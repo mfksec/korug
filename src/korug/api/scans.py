@@ -6,10 +6,10 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from subdomain_hunter.db import get_db
-from subdomain_hunter.auth_utils import get_current_user
-from subdomain_hunter.audit import log_audit_event, AuditEvent
-from subdomain_hunter.models import (
+from korug.db import get_db
+from korug.auth_utils import get_current_user
+from korug.audit import log_audit_event, AuditEvent
+from korug.models import (
     Domain,
     Subdomain,
     Vulnerability,
@@ -18,7 +18,7 @@ from subdomain_hunter.models import (
     VulnerabilityResponse,
     ScanHistoryResponse,
 )
-from subdomain_hunter.services import discovery_service, takeover_detector
+from korug.services import discovery_service, takeover_detector
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

@@ -2,7 +2,7 @@
 
 ## Installation
 
-The CLI tool is automatically available when you install subdomain_hunter:
+The CLI tool is automatically available when you install korug:
 
 ```bash
 pip install -e .
@@ -11,7 +11,7 @@ pip install -e .
 Or use it directly with Python:
 
 ```bash
-python -m subdomain_hunter.cli [command]
+python -m korug.cli [command]
 ```
 
 ## Commands
@@ -21,7 +21,7 @@ python -m subdomain_hunter.cli [command]
 Add a new domain to monitor.
 
 ```bash
-subdomain-hunter add-domain example.com
+korug add-domain example.com
 ```
 
 Output:
@@ -34,7 +34,7 @@ Output:
 Remove a domain from monitoring.
 
 ```bash
-subdomain-hunter remove-domain example.com
+korug remove-domain example.com
 ```
 
 Output:
@@ -47,7 +47,7 @@ Output:
 List all monitored domains.
 
 ```bash
-subdomain-hunter list-domains
+korug list-domains
 ```
 
 Output:
@@ -67,10 +67,10 @@ Trigger a scan for domain(s).
 
 ```bash
 # Scan specific domain
-subdomain-hunter scan --domain example.com
+korug scan --domain example.com
 
 # Scan all enabled domains
-subdomain-hunter scan
+korug scan
 ```
 
 Output:
@@ -86,7 +86,7 @@ Output:
 Display latest scan results for a domain.
 
 ```bash
-subdomain-hunter show-results example.com
+korug show-results example.com
 ```
 
 Output:
@@ -111,7 +111,7 @@ Export scan results to file.
 
 ```bash
 # Export as XLSX (currently the only format)
-subdomain-hunter export example.com --format xlsx
+korug export example.com --format xlsx
 ```
 
 Output:
@@ -128,7 +128,7 @@ The XLSX file includes:
 Configure Slack webhook for notifications.
 
 ```bash
-subdomain-hunter config-slack
+korug config-slack
 ```
 
 Interactive prompt:
@@ -143,7 +143,7 @@ Slack webhook URL: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 Initialize the database schema.
 
 ```bash
-subdomain-hunter init-database
+korug init-database
 ```
 
 Output:
@@ -157,8 +157,8 @@ All commands support these options:
 
 ```bash
 # Show help
-subdomain-hunter --help
-subdomain-hunter [command] --help
+korug --help
+korug [command] --help
 ```
 
 ## Examples
@@ -167,32 +167,32 @@ subdomain-hunter [command] --help
 
 ```bash
 # Add domains
-subdomain-hunter add-domain example.com
-subdomain-hunter add-domain test.com
-subdomain-hunter add-domain mysite.org
+korug add-domain example.com
+korug add-domain test.com
+korug add-domain mysite.org
 
 # View all
-subdomain-hunter list-domains
+korug list-domains
 
 # Scan all at once
-subdomain-hunter scan
+korug scan
 
 # View results
-subdomain-hunter show-results example.com
-subdomain-hunter show-results test.com
+korug show-results example.com
+korug show-results test.com
 ```
 
 ### Export and Report
 
 ```bash
 # Add domain
-subdomain-hunter add-domain example.com
+korug add-domain example.com
 
 # Scan it
-subdomain-hunter scan --domain example.com
+korug scan --domain example.com
 
 # Export results
-subdomain-hunter export example.com --format xlsx
+korug export example.com --format xlsx
 
 # The file example.com_report.xlsx is ready for sharing
 ```
@@ -201,27 +201,27 @@ subdomain-hunter export example.com --format xlsx
 
 ```bash
 # Configure webhook
-subdomain-hunter config-slack
+korug config-slack
 
 # Re-edit your .env file to enable:
 # SLACK_ENABLED=true
 
 # Now scans will notify Slack
-subdomain-hunter scan
+korug scan
 ```
 
 ### Continuous Monitoring
 
 ```bash
 # Add domains to monitor
-subdomain-hunter add-domain example.com
-subdomain-hunter add-domain test.com
+korug add-domain example.com
+korug add-domain test.com
 
 # Schedule in crontab for daily scans
-# (0 0 * * * subdomain-hunter scan)
+# (0 0 * * * korug scan)
 
 # Periodically check results
-subdomain-hunter show-results example.com
+korug show-results example.com
 ```
 
 ## Troubleshooting
@@ -232,7 +232,7 @@ Ensure the package is installed:
 
 ```bash
 pip install -e .
-which subdomain-hunter
+which korug
 ```
 
 ### Database Error
@@ -240,7 +240,7 @@ which subdomain-hunter
 Initialize database:
 
 ```bash
-subdomain-hunter init-database
+korug init-database
 ```
 
 ### Tool Not Found (Subfinder/Amass)
@@ -260,8 +260,8 @@ The CLI works well with scripting:
 #!/bin/bash
 # Scan all domains and export reports
 
-for domain in $(subdomain-hunter list-domains | grep -oP '\b[a-z0-9]+\.[a-z]{2,}\b'); do
-  subdomain-hunter scan --domain "$domain"
-  subdomain-hunter export "$domain" --format xlsx
+for domain in $(korug list-domains | grep -oP '\b[a-z0-9]+\.[a-z]{2,}\b'); do
+  korug scan --domain "$domain"
+  korug export "$domain" --format xlsx
 done
 ```
