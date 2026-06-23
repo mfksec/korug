@@ -23,6 +23,7 @@ import { StatsCard } from './StatsCard'
 import { LoadingSpinner } from '../common/LoadingSpinner'
 import { useDomains } from '@/hooks/useDomains'
 import { formatDate } from '@/utils/formatters'
+import { domainAPI, type DashboardStats } from '@/api/domains'
 import DomainIcon from '@mui/icons-material/Domain'
 import SecurityIcon from '@mui/icons-material/Security'
 
@@ -32,9 +33,20 @@ export const DashboardHome: React.FC = () => {
   const [newDomain, setNewDomain] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+
+  const fetchStats = async () => {
+    try {
+      const data = await domainAPI.getDashboardStats()
+      setStats(data)
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats:', error)
+    }
+  }
 
   useEffect(() => {
     fetchDomains()
+    fetchStats()
   }, [fetchDomains])
 
   const handleAddDomain = async () => {
@@ -61,16 +73,13 @@ export const DashboardHome: React.FC = () => {
     }
   }
 
-  const totalVulnerabilities = 0 // TODO: Calculate from backend
-  const activeScans = 0 // TODO: Get from backend
-
   return (
     <Box sx={{ p: 3 }}>
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <StatsCard
             title="Total Domains"
-            value={domains.length}
+            value={stats?.total_domains ?? domains.length}
             icon={<DomainIcon />}
             isLoading={isLoading}
           />
@@ -78,20 +87,20 @@ export const DashboardHome: React.FC = () => {
         <Grid item xs={12} sm={6} md={3}>
           <StatsCard
             title="Vulnerabilities"
-            value={totalVulnerabilities}
+            value={stats?.total_vulnerabilities ?? 0}
             icon={<SecurityIcon />}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatsCard
             title="Active Scans"
-            value={activeScans}
+            value={stats?.active_scans ?? 0}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatsCard
             title="High Risk Domains"
-            value={0}
+            value={stats?.high_risk_domains ?? 0}
           />
         </Grid>
       </Grid>

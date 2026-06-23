@@ -8,10 +8,52 @@ from sqlalchemy.orm import Session
 from korug.db import get_db
 from korug.auth_utils import get_current_user
 from korug.audit import log_audit_event, AuditEvent
-from korug.models import Domain, DomainCreate, DomainUpdate, DomainResponse
+from korug.models import (
+    Domain,
+    Vulnerability,
+    ScanHistory,
+    DomainCreate,
+    DomainUpdate,
+    DomainResponse,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.get("/stats/dashboard")
+def get_dashboard_stats(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Aggregate stats for the dashboard home, computed from real data."""
+    total_domains = db.query(Domain).count()
+
+    total_vulnerabilities = db.query(Vulnerability).filter(
+        Vulnerability.is_false_positive.is_(False)
+    ).count()
+
+    active_scans = db.query(ScanHistory).filter(
+        ScanHistory.status == "running"
+    ).count()
+
+    # A domain is "high risk" if it has at least one high-confidence vulnerability.
+    high_risk_domains = (
+        db.query(Vulnerability.domain_id)
+        .filter(
+            Vulnerability.confidence_score >= 70,
+            Vulnerability.is_false_positive.is_(False),
+        )
+        .distinct()
+        .count()
+    )
+
+    return {
+        "total_domains": total_domains,
+        "total_vulnerabilities": total_vulnerabilities,
+        "active_scans": active_scans,
+        "high_risk_domains": high_risk_domains,
+    }
 
 
 @router.post("/", response_model=DomainResponse, status_code=status.HTTP_201_CREATED)

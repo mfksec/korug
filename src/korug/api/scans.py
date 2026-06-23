@@ -14,6 +14,7 @@ from korug.models import (
     Subdomain,
     Vulnerability,
     ScanHistory,
+    Alert,
     SubdomainResponse,
     VulnerabilityResponse,
     ScanHistoryResponse,
@@ -22,6 +23,30 @@ from korug.services import discovery_service, takeover_detector
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _severity_from_confidence(score: float) -> str:
+    """Map a vulnerability confidence score (0-100) to an alert severity."""
+    if score >= 90:
+        return "critical"
+    if score >= 70:
+        return "high"
+    if score >= 50:
+        return "medium"
+    return "low"
+
+
+def _alert_message(subdomain: str, vuln_type: str, details: str | None) -> str:
+    """Build a human-readable alert message from a vulnerability finding."""
+    summary = vuln_type.replace("_", " ")
+    if details:
+        try:
+            parsed = json.loads(details)
+            if isinstance(parsed, dict) and parsed.get("message"):
+                summary = parsed["message"]
+        except (ValueError, TypeError):
+            pass
+    return f"{subdomain}: {summary}"
 
 
 async def perform_scan(domain_id: int, db: Session):
@@ -102,6 +127,17 @@ async def perform_scan(domain_id: int, db: Session):
                             details=vuln["details"],
                         )
                         db.add(db_vuln)
+                        db.flush()
+
+                        # Raise a security alert for the newly found vulnerability
+                        db.add(Alert(
+                            domain_id=domain_id,
+                            vulnerability_id=db_vuln.id,
+                            target=subdomain,
+                            alert_type=vuln["vuln_type"],
+                            severity=_severity_from_confidence(vuln["confidence_score"]),
+                            message=_alert_message(subdomain, vuln["vuln_type"], vuln["details"]),
+                        ))
                     else:
                         # Update existing vulnerability
                         existing_vuln.confidence_score = vuln["confidence_score"]

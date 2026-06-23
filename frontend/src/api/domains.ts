@@ -1,9 +1,21 @@
 import client from './client'
 import { Domain, Subdomain, ScanHistory, PaginationParams } from '@/types'
 
+export interface DashboardStats {
+  total_domains: number
+  total_vulnerabilities: number
+  active_scans: number
+  high_risk_domains: number
+}
+
 export const domainAPI = {
   list: async (params?: PaginationParams) => {
     const response = await client.get<Domain[]>('/api/domains/', { params })
+    return response.data
+  },
+
+  getDashboardStats: async (): Promise<DashboardStats> => {
+    const response = await client.get<DashboardStats>('/api/domains/stats/dashboard')
     return response.data
   },
 

@@ -92,13 +92,32 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Secrets & local env files — NEVER commit real credentials.
+# All .env files are ignored except the committed *example/template* files.
+.env
+.env.*
+*.local
+!.env.example
+!.env.docker
+!**/.env.example
+
+# Runtime secrets / artifacts
+audit.log
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+secrets.json
+credentials.json
 
 # Spyder project settings
 .spyderproject
