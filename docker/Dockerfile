@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     unzip \
+    nmap \
     build-essential \
     libssl-dev \
     libffi-dev \

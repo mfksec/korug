@@ -4,9 +4,43 @@ import pytest
 from korug.services.enrichment import (
     is_cloudflare_ip,
     detect_technologies,
+    _parse_nmap_xml,
     EnrichResult,
     EnrichmentService,
 )
+
+
+NMAP_XML = """<?xml version="1.0"?>
+<nmaprun>
+  <host>
+    <ports>
+      <port protocol="tcp" portid="22">
+        <state state="open"/>
+        <service name="ssh" product="OpenSSH" version="8.9"/>
+      </port>
+      <port protocol="tcp" portid="80">
+        <state state="closed"/>
+        <service name="http"/>
+      </port>
+      <port protocol="tcp" portid="443">
+        <state state="open"/>
+        <service name="https" product="nginx" version="1.25.3"/>
+      </port>
+    </ports>
+  </host>
+</nmaprun>"""
+
+
+def test_parse_nmap_xml_extracts_open_ports_with_service():
+    ports = _parse_nmap_xml(NMAP_XML)
+    assert [p["port"] for p in ports] == [22, 443]  # 80 is closed -> excluded
+    ssh = next(p for p in ports if p["port"] == 22)
+    assert ssh["service"] == "ssh" and ssh["product"] == "OpenSSH" and ssh["version"] == "8.9"
+
+
+def test_parse_nmap_xml_handles_garbage():
+    assert _parse_nmap_xml("not xml") == []
+    assert _parse_nmap_xml("") == []
 
 
 def test_cloudflare_ip_detection():

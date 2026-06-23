@@ -36,7 +36,9 @@ export const DashboardHome: React.FC = () => {
   const [editEnabled, setEditEnabled] = useState(true)
 
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
-  const [scanning, setScanning] = useState<number | null>(null)
+  const [scanDomain, setScanDomain] = useState<Domain | null>(null)
+  const [scanPortScan, setScanPortScan] = useState(false)
+  const [scanStarting, setScanStarting] = useState(false)
   const [detailDomain, setDetailDomain] = useState<Domain | null>(null)
 
   const fetchStats = async () => {
@@ -84,15 +86,19 @@ export const DashboardHome: React.FC = () => {
     }
   }
 
-  const handleScan = async (d: Domain) => {
-    setScanning(d.id)
+  const openScan = (d: Domain) => { setScanDomain(d); setScanPortScan(false) }
+
+  const handleStartScan = async () => {
+    if (!scanDomain) return
+    setScanStarting(true)
     try {
-      await scanAPI.triggerScan(d.id)
-      setToast({ msg: `Scan started for ${d.domain_name}. Results appear in a few minutes.`, sev: 'success' })
+      await scanAPI.triggerScan(scanDomain.id, scanPortScan)
+      setToast({ msg: `Scan started for ${scanDomain.domain_name}. Results appear in a few minutes.`, sev: 'success' })
+      setScanDomain(null)
     } catch (err) {
       setToast({ msg: apiErrorMessage(err, 'Failed to start scan'), sev: 'error' })
     } finally {
-      setScanning(null)
+      setScanStarting(false)
     }
   }
 
@@ -158,12 +164,9 @@ export const DashboardHome: React.FC = () => {
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} justifyContent="flex-end">
                         <Tooltip title="Run scan">
-                          <span>
-                            <IconButton size="small" color="primary" disabled={scanning === domain.id}
-                                        onClick={() => handleScan(domain)}>
-                              <PlayArrowIcon fontSize="small" />
-                            </IconButton>
-                          </span>
+                          <IconButton size="small" color="primary" onClick={() => openScan(domain)}>
+                            <PlayArrowIcon fontSize="small" />
+                          </IconButton>
                         </Tooltip>
                         <Tooltip title="View results">
                           <IconButton size="small" onClick={() => setDetailDomain(domain)}>
@@ -232,6 +235,31 @@ export const DashboardHome: React.FC = () => {
           <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
           <Button onClick={() => deleteConfirm !== null && handleDeleteDomain(deleteConfirm)} color="error" variant="contained">
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Scan options */}
+      <Dialog open={Boolean(scanDomain)} onClose={() => !scanStarting && setScanDomain(null)} fullWidth maxWidth="xs">
+        <DialogTitle>Run scan</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Passive discovery + enrichment for <b>{scanDomain?.domain_name}</b>.
+          </Typography>
+          <FormControlLabel
+            control={<Switch checked={scanPortScan} onChange={(e) => setScanPortScan(e.target.checked)} />}
+            label="Include port scan (active)"
+          />
+          {scanPortScan && (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              Port scanning is an active probe. Only enable it for targets you are authorized to scan.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setScanDomain(null)} disabled={scanStarting}>Cancel</Button>
+          <Button onClick={handleStartScan} variant="contained" startIcon={<PlayArrowIcon />} disabled={scanStarting}>
+            {scanStarting ? 'Starting…' : 'Start scan'}
           </Button>
         </DialogActions>
       </Dialog>

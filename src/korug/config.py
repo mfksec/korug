@@ -66,10 +66,12 @@ class Settings(BaseSettings):
 
     # Recon / enrichment
     enable_http_probe: bool = Field(default=True)      # status/title/tech via HTTP(S)
-    enable_port_scan: bool = Field(default=False)      # active TCP connect scan (opt-in)
+    enable_port_scan: bool = Field(default=False)      # active port scan (opt-in default)
     port_scan_ports: str = Field(default="21,22,25,53,80,110,143,443,445,3306,3389,5432,6379,8080,8443")
     enrichment_concurrency: int = Field(default=50)    # max concurrent probes/resolves
     http_probe_timeout: int = Field(default=8)         # seconds per probe
+    nmap_path: str = Field(default="nmap")             # used for port scan when available
+    nmap_service_detection: bool = Field(default=True) # nmap -sV (service/version)
     
     # AWS
     aws_region: str = Field(default="us-east-1")

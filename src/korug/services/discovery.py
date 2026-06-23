@@ -78,6 +78,8 @@ class DiscoveryService:
                 tasks["binaryedge"] = self._binaryedge(session, domain)
             if settings.urlscan_api_key:
                 tasks["urlscan"] = self._urlscan(session, domain)
+            if settings.censys_api_id and settings.censys_api_secret:
+                tasks["censys"] = self._censys(session, domain)
 
             results = await asyncio.gather(*tasks.values(), return_exceptions=True)
             for source, result in zip(tasks.keys(), results):
@@ -209,6 +211,22 @@ class DiscoveryService:
         headers = {"API-Key": settings.urlscan_api_key}
         data = await self._get_json(session, url, headers=headers)
         return {r.get("page", {}).get("domain", "") for r in (data or {}).get("results", [])}
+
+    async def _censys(self, session, domain) -> Set[str]:
+        """Censys Search v2 hosts API (HTTP basic auth with API id/secret)."""
+        url = f"https://search.censys.io/api/v2/hosts/search?q={domain}&per_page=100"
+        auth = aiohttp.BasicAuth(settings.censys_api_id, settings.censys_api_secret)
+        out: Set[str] = set()
+        async with session.get(url, auth=auth) as resp:
+            if resp.status != 200:
+                return out
+            data = await resp.json(content_type=None)
+        for hit in (data or {}).get("result", {}).get("hits", []):
+            names = hit.get("names") or hit.get("dns", {}).get("names") or []
+            out.update(names)
+            if hit.get("name"):
+                out.add(hit["name"])
+        return out
 
     # ---- Local CLI tools ---------------------------------------------------
 
