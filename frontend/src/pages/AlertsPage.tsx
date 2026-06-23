@@ -194,7 +194,7 @@ export const AlertsPage: React.FC = () => {
           </Typography>
           <TableContainer component={Paper}>
             <Table>
-              <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+              <TableHead sx={{ bgcolor: 'action.hover' }}>
                 <TableRow>
                   <TableCell>Domain</TableCell>
                   <TableCell>Alert Type</TableCell>
@@ -250,7 +250,7 @@ export const AlertsPage: React.FC = () => {
             </Typography>
             <TableContainer component={Paper}>
               <Table>
-                <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
                   <TableRow>
                     <TableCell>Domain</TableCell>
                     <TableCell>Alert Type</TableCell>

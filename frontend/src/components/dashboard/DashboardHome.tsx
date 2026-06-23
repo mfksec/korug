@@ -127,7 +127,7 @@ export const DashboardHome: React.FC = () => {
           <TableContainer>
             <Table>
               <TableHead>
-                <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                <TableRow sx={{ backgroundColor: 'action.hover' }}>
                   <TableCell>Domain</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Last Scanned</TableCell>

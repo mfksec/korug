@@ -199,7 +199,7 @@ export const AuditLogsPage: React.FC = () => {
 
             <TableContainer>
               <Table>
-                <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                <TableHead sx={{ bgcolor: 'action.hover' }}>
                   <TableRow>
                     <TableCell>Timestamp</TableCell>
                     <TableCell>Action</TableCell>

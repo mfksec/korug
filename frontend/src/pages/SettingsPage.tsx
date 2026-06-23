@@ -365,7 +365,7 @@ export const SettingsPage: React.FC = () => {
                     variant="body2"
                     sx={{
                       fontFamily: 'monospace',
-                      bgcolor: '#f5f5f5',
+                      bgcolor: 'action.hover',
                       p: 1,
                       borderRadius: 1,
                       wordBreak: 'break-all',
