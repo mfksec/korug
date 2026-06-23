@@ -13,9 +13,11 @@ from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from limits import parse as parse_rate_limit
+from sqlalchemy.orm import Session
 
 from subdomain_hunter.config import get_settings
-from subdomain_hunter.db import init_db
+from subdomain_hunter.db import init_db, get_db, SessionLocal
 from subdomain_hunter.audit import setup_audit_logger, log_audit_event, AuditEvent
 from subdomain_hunter.api import domains, vulnerabilities, scans, export, alerts, settings
 from subdomain_hunter.auth_utils import (
@@ -23,10 +25,10 @@ from subdomain_hunter.auth_utils import (
     create_refresh_token,
     verify_token,
     get_current_user,
-    hash_password,
-    verify_password,
 )
-from subdomain_hunter.token_blacklist import add_to_blacklist
+from subdomain_hunter.models import UserResponse
+from subdomain_hunter.users import authenticate_user, get_user_by_username, record_login, seed_admin_user
+from subdomain_hunter.token_blacklist import add_to_blacklist, is_blacklisted
 
 logger = logging.getLogger(__name__)
 app_settings = get_settings()
@@ -48,12 +50,6 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
-class UserResponse(BaseModel):
-    id: int
-    email: str
-    role: str = "admin"
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
@@ -65,7 +61,17 @@ async def lifespan(app: FastAPI):
     
     init_db()
     logger.info("Database initialized")
-    
+
+    # Seed the initial admin account on first run (no-op if users already exist)
+    try:
+        db = SessionLocal()
+        try:
+            seed_admin_user(db)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Admin seeding skipped: {e}")
+
     # Initialize scheduler if needed
     # scheduler.start()
     
@@ -86,9 +92,17 @@ def create_app() -> FastAPI:
         debug=app_settings.fastapi_debug,
     )
     
-    # Initialize rate limiter
+    # Initialize rate limiter. When REDIS_URL is set the counters live in Redis,
+    # so limits are enforced consistently across all worker processes; otherwise
+    # an in-memory store is used (single-process / local development only).
     if app_settings.enable_rate_limiting:
-        limiter = Limiter(key_func=get_remote_address)
+        limiter_kwargs = {"key_func": get_remote_address}
+        if app_settings.redis_url:
+            limiter_kwargs["storage_uri"] = app_settings.redis_url
+            logger.info("Rate limiter: using Redis storage")
+        else:
+            logger.info("Rate limiter: using in-memory storage (single process)")
+        limiter = Limiter(**limiter_kwargs)
         app.state.limiter = limiter
         
         @app.exception_handler(RateLimitExceeded)
@@ -163,50 +177,58 @@ def create_app() -> FastAPI:
 
     # Authentication endpoints
     @app.post("/api/auth/login", response_model=TokenResponse)
-    async def login(request: LoginRequest, response: Response):
-        """Login endpoint - returns access and refresh tokens.
-        
-        SECURITY: 
-        - Rate limited to prevent brute force attacks
+    async def login(request: LoginRequest, response: Response, db: Session = Depends(get_db)):
+        """Login endpoint - validates credentials against the database and
+        returns access and refresh tokens.
+
+        SECURITY:
+        - Credentials verified against bcrypt-hashed passwords in the database
+        - Rate limited per IP+username to prevent brute force attacks
+        - Generic error message to avoid username enumeration
         - Optional httpOnly cookies for token storage
         """
-        # Apply rate limiting if enabled
+        # Apply rate limiting if enabled (per-username, brute-force protection).
+        # slowapi's Limiter wraps a synchronous `limits` strategy at `.limiter`;
+        # `hit()` returns False once the window is exhausted.
         if app.state.limiter:
-            await app.state.limiter.hit(
-                f"login_{request.username}",
-                app_settings.login_rate_limit
-            )
-        
-        # For demo: accept any non-empty credentials
-        # In production: validate against user database with password hashing
-        if not request.username or not request.password:
+            rate_item = parse_rate_limit(app_settings.login_rate_limit)
+            if not app.state.limiter.limiter.hit(rate_item, "login", request.username):
+                log_audit_event(
+                    AuditEvent.LOGIN_FAILED,
+                    user=request.username or "unknown",
+                    status="failure",
+                    details={"reason": "rate_limited"},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many login attempts. Please try again later.",
+                )
+
+        # Validate credentials against the database (bcrypt-hashed passwords).
+        user = authenticate_user(db, request.username, request.password)
+        if user is None:
             log_audit_event(
                 AuditEvent.LOGIN_FAILED,
                 user=request.username or "unknown",
                 status="failure",
-                details={"reason": "empty_credentials"}
+                details={"reason": "invalid_credentials"},
             )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username or password",
             )
-        
-        # TODO: Replace with database user lookup and verify_password() call
-        # user = db.query(User).filter(User.username == request.username).first()
-        # if not user or not verify_password(request.password, user.hashed_password):
-        #     log_audit_event(AuditEvent.LOGIN_FAILED, user=request.username, status="failure")
-        #     raise HTTPException(status_code=401, detail="Invalid username or password")
-        
-        logger.info(f"User {request.username} logged in")
-        
+
+        record_login(db, user)
+        logger.info(f"User {user.username} logged in")
+
         log_audit_event(
             AuditEvent.LOGIN_SUCCESS,
-            user=request.username,
-            status="success"
+            user=user.username,
+            status="success",
         )
-        
-        access_token = create_access_token({"sub": request.username, "type": "access"})
-        refresh_token = create_refresh_token({"sub": request.username})
+
+        access_token = create_access_token({"sub": user.username, "type": "access"})
+        refresh_token = create_refresh_token({"sub": user.username})
         
         # Option 1: Use httpOnly cookies (recommended for production)
         if app_settings.use_httponly_cookies:
@@ -234,22 +256,38 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/api/auth/refresh")
-    async def refresh_access_token(request: RefreshTokenRequest, response: Response):
+    async def refresh_access_token(request: RefreshTokenRequest, response: Response, db: Session = Depends(get_db)):
         """Refresh access token using refresh token.
-        
+
         SECURITY:
         - Validates refresh token type
+        - Rejects revoked refresh tokens and deactivated/deleted users
         - Optional httpOnly cookie-based storage
         """
         try:
             payload = verify_token(request.refresh_token, token_type="refresh")
-            
+
+            # Reject refresh tokens that were revoked (e.g. via logout).
+            if is_blacklisted(payload.get("jti")):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token has been revoked",
+                )
+
+            # Ensure the user still exists and is active.
+            user = get_user_by_username(db, payload.get("sub"))
+            if user is None or not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User no longer exists or is inactive",
+                )
+
             log_audit_event(
                 AuditEvent.TOKEN_REFRESH,
                 user=payload.get("sub"),
                 status="success"
             )
-            
+
             access_token = create_access_token({"sub": payload["sub"], "type": "access"})
             
             # Option 1: Use httpOnly cookies
@@ -298,21 +336,21 @@ def create_app() -> FastAPI:
         username = current_user['sub']
         auth_header = request.headers.get("authorization", "")
         token = auth_header.removeprefix("Bearer ").strip()
-        
-        # Extract token expiration and add to blacklist
+
+        # Revoke the token by its jti until its natural expiry.
         try:
             token_payload = jwt.decode(
                 token,
                 app_settings.jwt_secret_key,
                 algorithms=["HS256"]
             )
-            exp_time = token_payload.get('exp')
-            if exp_time:
+            jti = token_payload.get("jti")
+            exp_time = token_payload.get("exp")
+            if jti and exp_time:
                 exp_datetime = datetime.fromtimestamp(exp_time, tz=timezone.utc)
-                # Add token to blacklist until expiration
-                add_to_blacklist(token, exp_datetime)
+                add_to_blacklist(jti, exp_datetime)
         except Exception as e:
-            logger.warning(f"Could not extract token expiry for blacklist: {e}")
+            logger.warning(f"Could not revoke token on logout: {e}")
         
         logger.info(f"User {username} logged out")
         
@@ -325,13 +363,18 @@ def create_app() -> FastAPI:
         return {"message": "Logged out successfully"}
 
     @app.get("/api/auth/me", response_model=UserResponse)
-    async def get_current_user_info(current_user: dict = Depends(get_current_user)):
-        """Get current user info."""
-        return {
-            "id": 1,
-            "email": current_user.get("sub", "user@example.com"),
-            "role": "admin",
-        }
+    async def get_current_user_info(
+        current_user: dict = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ):
+        """Get the authenticated user's profile from the database."""
+        user = get_user_by_username(db, current_user["sub"])
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        return user
 
     # Health check endpoint
     @app.get("/health")

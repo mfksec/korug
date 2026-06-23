@@ -8,6 +8,23 @@ from sqlalchemy.orm import relationship
 Base = declarative_base()
 
 
+class User(Base):
+    """User model - represents an authenticated dashboard/API user."""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(64), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    role = Column(String(32), default="admin", nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<User(id={self.id}, username={self.username}, role={self.role})>"
+
+
 class Domain(Base):
     """Domain model - represents a domain to monitor."""
     __tablename__ = "domains"

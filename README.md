@@ -54,15 +54,19 @@ Subdomain Hunter automates subdomain discovery and vulnerability detection for o
 ```bash
 git clone https://github.com/mfksec/subdomain_hunter.git
 cd subdomain_hunter
-cp .env.example .env
 docker-compose -f docker/docker-compose.yml up -d
 sleep 10
-docker exec subdomain_hunter_app python -m subdomain_hunter.cli init-database
 ```
 
 **Access:**
-- 🌐 **Web Dashboard**: http://localhost:3000 (admin / admin123)
+- 🌐 **Web Dashboard**: http://localhost:3000
 - 📚 **API Docs**: http://localhost:8000/docs
+
+**First Login:**
+Check the application logs for the auto-generated admin password:
+```bash
+docker-compose -f docker/docker-compose.yml logs subdomain-hunter-api | grep -A 5 "admin account"
+```
 
 For **local development** or **detailed setup**, see [Quick Start Guide](docs/QUICKSTART.md).
 
@@ -85,9 +89,10 @@ See [User Guide](docs/USER_GUIDE.md) for detailed feature walkthrough.
 ## 📖 Documentation
 
 - [**Quick Start**](docs/QUICKSTART.md) - 5-minute setup & troubleshooting
+- [**Authentication**](docs/AUTH.md) - User management, JWT tokens, security
 - [**User Guide**](docs/USER_GUIDE.md) - Dashboard features & workflows
-- [**API Reference**](docs/API.md) - REST endpoints
-- [**CLI Reference**](docs/CLI.md) - Command-line tool
+- [**API Reference**](docs/API.md) - REST endpoints & authentication
+- [**CLI Reference**](docs/CLI.md) - Command-line tool & user management
 - [**Architecture**](docs/ARCHITECTURE.md) - System design
 - [**Installation**](docs/INSTALLATION.md) - Detailed setup
 - [**Security**](SECURITY.md) - Vulnerability reporting
@@ -95,13 +100,19 @@ See [User Guide](docs/USER_GUIDE.md) for detailed feature walkthrough.
 
 ## ⚙️ Configuration
 
-Create `.env` from `.env.example` and set:
+Create `.env` from `.env.example` and set required variables:
+
+**REQUIRED** (for both local & Docker):
 - `DATABASE_URL` - PostgreSQL connection string
 - `JWT_SECRET_KEY` - API secret (min 32 bytes)
-- `API_KEY` - Your API key
+- `API_KEY` - API key for service-to-service auth
 - `ALLOWED_ORIGINS` - CORS origins (e.g., `http://localhost:3000`)
 
-Optional: Slack webhooks, Shodan/urlscan keys, scanning schedule.
+**OPTIONAL**:
+- `REDIS_URL` - Redis URL (for distributed rate limiting)
+- `ADMIN_USERNAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` - Admin seeding
+- `SLACK_WEBHOOK_URL`, `SHODAN_API_KEY`, `URLSCAN_API_KEY` - Integrations
+- See [Authentication](docs/AUTH.md) for full auth configuration
 
 ## 🏗️ Architecture
 

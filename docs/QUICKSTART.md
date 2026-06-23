@@ -17,23 +17,13 @@ The easiest way to get everything running locally with UI + Backend + Database.
 git clone https://github.com/mfksec/subdomain_hunter.git
 cd subdomain_hunter
 
-# 2. Copy environment configuration
-cp .env.example .env
-
-# 3. (Optional) Edit .env for custom settings
-# For most users, defaults work fine for local deployment
-nano .env  # or open in your editor
-
-# 4. Start all services with one command
+# 2. Start all services with one command
 docker-compose -f docker/docker-compose.yml up -d
 
-# 5. Wait 10 seconds for services to start
+# 3. Wait 10 seconds for services to start
 sleep 10
 
-# 6. Initialize the database
-docker exec subdomain_hunter_app python -m subdomain_hunter.cli init-database
-
-# 7. (Optional) Add your first domain
+# 4. (Optional) Add your first domain
 docker exec subdomain_hunter_app python -m subdomain_hunter.cli add-domain example.com
 ```
 
@@ -44,13 +34,31 @@ docker exec subdomain_hunter_app python -m subdomain_hunter.cli add-domain examp
 | **Web Dashboard** | http://localhost:3000 | Main user interface |
 | **API Documentation** | http://localhost:8000/docs | Interactive API reference |
 | **Database** | localhost:5432 | PostgreSQL (internal) |
+| **Redis Cache** | localhost:6379 | Redis (internal) |
 
-### Default Credentials
+### First Login
 
-- **Username**: `admin`
-- **Password**: `admin123`
+An admin account is automatically created on first startup. **Find the credentials in the logs:**
 
-⚠️ **Change your password on first login!** (Settings → Account)
+```bash
+# Check the logs for the auto-generated admin password
+docker-compose -f docker/docker-compose.yml logs subdomain-hunter-api | grep -A 5 "admin account"
+
+# Output will show:
+# ========================================================================
+# No ADMIN_PASSWORD set. Created initial admin account:
+#     username: admin
+#     password: TrKxL9mN8pQ2vWxYz3jKlMn4oP
+# Store this now and change it after first login.
+# ========================================================================
+```
+
+Use these credentials to log into the dashboard at http://localhost:3000.
+
+⚠️ **IMPORTANT**: 
+- Save the password somewhere secure
+- Change it immediately after first login (Dashboard → Settings → Account)
+- For production deployments, set `ADMIN_PASSWORD` in `docker/.env.docker` to a strong value before starting
 
 ### Useful Docker Commands
 
@@ -100,14 +108,24 @@ brew install subfinder amass  # macOS
 # 4. Copy environment configuration
 cp .env.example .env
 
-# 5. (Optional) Edit .env if needed
-# Default SQLite will work for testing
-nano .env
+# 5. Set required environment variables
+export DATABASE_URL="sqlite:///./test.db"  # SQLite for local testing
+export JWT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5174,http://localhost:8000"
 
 # 6. Initialize database
 python -m subdomain_hunter.cli init-database
 
-# 7. Start the API server
+# 7. Create an admin user
+python -m subdomain_hunter.cli create-user
+# Interactive prompt:
+# Username: admin
+# Email: admin@localhost
+# Password: (secure password, min 8 chars)
+# Role: admin
+
+# 8. Start the API server
 python -m subdomain_hunter.run
 ```
 

@@ -1,29 +1,41 @@
 """JWT authentication utilities with password hashing."""
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
-from passlib.context import CryptContext
+from sqlalchemy.orm import Session
 
 from subdomain_hunter.config import get_settings
+from subdomain_hunter.db import get_db
+from subdomain_hunter.models import User
 from subdomain_hunter.token_blacklist import is_blacklisted
 
 settings = get_settings()
 security = HTTPBearer()
 
-# Password hashing configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt only considers the first 72 bytes of a password. We truncate
+# explicitly (consistently for hash and verify) so longer inputs don't raise.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _to_bcrypt_bytes(password: str) -> bytes:
+    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt and return the encoded hash string."""
+    return bcrypt.hashpw(_to_bcrypt_bytes(password), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against its bcrypt hash (constant-time)."""
+    try:
+        return bcrypt.checkpw(_to_bcrypt_bytes(plain_password), hashed_password.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -37,7 +49,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode.update({
         "exp": expire,
         "type": "access",  # Explicit type marker
-        "iat": datetime.utcnow()
+        "iat": datetime.utcnow(),
+        "jti": uuid.uuid4().hex,  # Unique id for revocation
     })
     try:
         # Use configured secret - NO FALLBACK
@@ -61,7 +74,8 @@ def create_refresh_token(data: dict) -> str:
     to_encode.update({
         "exp": expire,
         "type": "refresh",  # Type marker for validation
-        "iat": datetime.utcnow()
+        "iat": datetime.utcnow(),
+        "jti": uuid.uuid4().hex,  # Unique id for revocation
     })
     try:
         # Use configured secret - NO FALLBACK
@@ -107,17 +121,52 @@ def verify_token(token: str, token_type: str = "access") -> Dict[str, Any]:
         )
 
 
-async def get_current_user(credentials = Depends(security)) -> Dict[str, Any]:
-    """Get current user from token with type validation and blacklist check."""
+async def get_current_user(
+    credentials=Depends(security),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Resolve the current user from a bearer token.
+
+    Performs, in order: signature/type validation, revocation (jti) check, and a
+    database lookup to confirm the user still exists and is active. Returns the
+    token payload enriched with ``user_id`` and ``role`` from the database. The
+    ``sub`` claim (username) is preserved for backward compatibility with
+    existing route handlers.
+    """
     token = credentials.credentials
-    
-    # Check if token is blacklisted (e.g., after logout)
-    if is_blacklisted(token):
+
+    payload = verify_token(token, token_type="access")
+
+    # Reject tokens revoked via logout (checked by jti)
+    if is_blacklisted(payload.get("jti")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has been revoked",
         )
-    
-    payload = verify_token(token, token_type="access")
+
+    username = payload.get("sub")
+    user = db.query(User).filter(User.username == username).first()
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User no longer exists or is inactive",
+        )
+
+    payload["user_id"] = user.id
+    payload["role"] = user.role
     return payload
+
+
+def require_role(*roles: str):
+    """Dependency factory enforcing that the current user has one of ``roles``."""
+
+    async def _checker(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+        if current_user.get("role") not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return current_user
+
+    return _checker
 
