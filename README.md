@@ -1,4 +1,4 @@
-# Subdomain Hunter
+# Körüg
 
 A comprehensive subdomain security monitoring tool that discovers subdomains across multiple sources, detects takeover vulnerabilities, and integrates with Slack for real-time notifications and continuous monitoring.
 
@@ -6,7 +6,7 @@ A comprehensive subdomain security monitoring tool that discovers subdomains acr
 
 ## 🎯 Overview
 
-Subdomain Hunter automates subdomain discovery and vulnerability detection for organizations that want to monitor their entire domain ecosystem. It combines multiple discovery sources (Subfinder, Amass, Shodan, urlscan) with intelligent takeover detection to identify security gaps before attackers do.
+Körüg automates subdomain discovery and vulnerability detection for organizations that want to monitor their entire domain ecosystem. It combines multiple discovery sources (Subfinder, Amass, Shodan, urlscan) with intelligent takeover detection to identify security gaps before attackers do.
 
 ### Perfect For:
 - **Security Teams**: Monitor and track subdomain security posture
@@ -52,8 +52,8 @@ Subdomain Hunter automates subdomain discovery and vulnerability detection for o
 
 **Docker Setup (5 minutes):**
 ```bash
-git clone https://github.com/mfksec/subdomain_hunter.git
-cd subdomain_hunter
+git clone https://github.com/mfksec/korug.git
+cd korug
 docker-compose -f docker/docker-compose.yml up -d
 sleep 10
 ```
@@ -65,7 +65,7 @@ sleep 10
 **First Login:**
 Check the application logs for the auto-generated admin password:
 ```bash
-docker-compose -f docker/docker-compose.yml logs subdomain-hunter-api | grep -A 5 "admin account"
+docker-compose -f docker/docker-compose.yml logs korug-api | grep -A 5 "admin account"
 ```
 
 For **local development** or **detailed setup**, see [Quick Start Guide](docs/QUICKSTART.md).
@@ -126,7 +126,7 @@ See [Architecture Docs](docs/ARCHITECTURE.md) for detailed design.
 
 ## 🔐 Security
 
-Subdomain Hunter includes enterprise-grade security features:
+Körüg includes enterprise-grade security features:
 
 - **Authentication**: JWT-based API authentication with type validation
 - **Password Security**: Bcrypt hashing for all credentials
@@ -156,7 +156,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 
 # Start API server
-python -m subdomain_hunter.run
+python -m korug.run
 ```
 
 ## 📄 License
@@ -174,5 +174,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 ## 💬 Support & Resources
 
 - 📚 [Full Documentation](docs/)
-- 🐛 [Report Issues](https://github.com/mfksec/subdomain_hunter/issues)
+- 🐛 [Report Issues](https://github.com/mfksec/korug/issues)
 - 📧 [Security Contact](security@amboss.com)

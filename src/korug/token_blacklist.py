@@ -17,7 +17,7 @@ from typing import Dict, Optional
 import logging
 import threading
 
-from subdomain_hunter.config import get_settings
+from korug.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

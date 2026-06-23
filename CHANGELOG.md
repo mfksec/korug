@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-06-18
 
 ### Added
-- Initial release of Subdomain Hunter
+- Initial release of Körüg
 - Multi-source subdomain discovery (Subfinder, Amass, Shodan.io, urlscan.io)
 - Subdomain takeover vulnerability detection with confidence scoring
 - REST API with 8+ endpoints

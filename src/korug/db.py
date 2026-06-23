@@ -4,8 +4,8 @@ import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
-from subdomain_hunter.config import get_settings
-from subdomain_hunter.models.base import Base
+from korug.config import get_settings
+from korug.models.base import Base
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

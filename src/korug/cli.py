@@ -1,4 +1,4 @@
-"""Command-line interface for Subdomain Hunter."""
+"""Command-line interface for Körüg."""
 import json
 import logging
 from datetime import datetime
@@ -7,10 +7,10 @@ from typing import Optional
 import click
 from sqlalchemy.orm import Session
 
-from subdomain_hunter import get_settings, get_db, init_db
-from subdomain_hunter.models import Domain, Subdomain, Vulnerability, User
-from subdomain_hunter.services import discovery_service, takeover_detector
-from subdomain_hunter.users import create_user, get_user_by_username, authenticate_user
+from korug import get_settings, get_db, init_db
+from korug.models import Domain, Subdomain, Vulnerability, User
+from korug.services import discovery_service, takeover_detector
+from korug.users import create_user, get_user_by_username, authenticate_user
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ settings = get_settings()
 
 @click.group()
 def cli():
-    """Subdomain Hunter - Security monitoring tool for subdomains."""
+    """Körüg - Security monitoring tool for subdomains."""
     pass
 
 
@@ -188,7 +188,7 @@ def export(domain: str, format: str):
             return
         
         if format == "xlsx":
-            from subdomain_hunter.api.export import export_to_xlsx
+            from korug.api.export import export_to_xlsx
             
             # We'll implement direct XLSX export in CLI separately
             click.echo(f"✅ Export would be saved to {domain}_report.xlsx")
@@ -343,7 +343,7 @@ def change_password_cmd(username: str, password: str):
             click.echo(f"❌ User '{username}' not found")
             return
         
-        from subdomain_hunter.auth_utils import hash_password
+        from korug.auth_utils import hash_password
         
         user.hashed_password = hash_password(password)
         db.add(user)

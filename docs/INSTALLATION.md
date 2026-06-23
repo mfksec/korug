@@ -5,8 +5,8 @@
 ### Using Docker (Recommended)
 
 ```bash
-git clone https://github.com/mfksec/subdomain_hunter.git
-cd subdomain_hunter
+git clone https://github.com/mfksec/korug.git
+cd korug
 
 # Copy environment template
 cp .env.example .env
@@ -15,7 +15,7 @@ cp .env.example .env
 docker-compose -f docker/docker-compose.yml up -d
 
 # Initialize database
-docker exec subdomain_hunter_app python -m subdomain_hunter.cli init-database
+docker exec korug_app python -m korug.cli init-database
 
 # Test it's running
 curl http://localhost:8000/health
@@ -35,8 +35,8 @@ Visit: `http://localhost:8000/docs` to see the API documentation.
 
 ```bash
 # Clone repository
-git clone https://github.com/mfksec/subdomain_hunter.git
-cd subdomain_hunter
+git clone https://github.com/mfksec/korug.git
+cd korug
 
 # Create virtual environment
 python3.11 -m venv venv
@@ -60,23 +60,23 @@ cp .env.example .env
 psql -U postgres
 
 # Create database and user
-CREATE DATABASE subdomain_hunter;
+CREATE DATABASE korug;
 CREATE USER subdomain_user WITH PASSWORD 'subdomain_password';
-GRANT ALL PRIVILEGES ON DATABASE subdomain_hunter TO subdomain_user;
+GRANT ALL PRIVILEGES ON DATABASE korug TO subdomain_user;
 \q
 
 # Initialize schema
-python -m subdomain_hunter.cli init-database
+python -m korug.cli init-database
 ```
 
 #### Run Application
 
 ```bash
 # Terminal 1: FastAPI server
-python -m subdomain_hunter.run
+python -m korug.run
 
 # Terminal 2: Use CLI or visit http://localhost:8000/docs
-python -m subdomain_hunter.cli list-domains
+python -m korug.cli list-domains
 ```
 
 ## Configuration
@@ -87,7 +87,7 @@ Create `.env` file with your settings:
 
 ```bash
 # Database
-DATABASE_URL=postgresql://subdomain_user:password@localhost:5432/subdomain_hunter
+DATABASE_URL=postgresql://subdomain_user:password@localhost:5432/korug
 
 # API
 FASTAPI_ENV=development
@@ -135,16 +135,16 @@ CONFIDENCE_THRESHOLD=75
 ```bash
 # Use different port
 export PORT=8001
-python -m subdomain_hunter.run
+python -m korug.run
 ```
 
 ### PostgreSQL Connection Error
 ```bash
 # Check PostgreSQL is running
-psql -U subdomain_user -d subdomain_hunter -c "SELECT 1"
+psql -U subdomain_user -d korug -c "SELECT 1"
 
 # Check connection string in .env
-DATABASE_URL=postgresql://subdomain_user:password@localhost:5432/subdomain_hunter
+DATABASE_URL=postgresql://subdomain_user:password@localhost:5432/korug
 ```
 
 ### Subfinder/Amass Not Found

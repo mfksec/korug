@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from subdomain_hunter.db import get_db
-from subdomain_hunter.auth_utils import get_current_user
+from korug.db import get_db
+from korug.auth_utils import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

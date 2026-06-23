@@ -2,7 +2,7 @@
 import pytest
 import json
 from unittest.mock import patch, MagicMock
-from subdomain_hunter.services.discovery import DiscoveryService
+from korug.services.discovery import DiscoveryService
 
 
 @pytest.fixture

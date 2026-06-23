@@ -9,10 +9,10 @@ from sqlalchemy.orm import Session
 import openpyxl
 from openpyxl.styles import Font, PatternFill
 
-from subdomain_hunter.db import get_db
-from subdomain_hunter.auth_utils import get_current_user
-from subdomain_hunter.audit import log_audit_event, AuditEvent
-from subdomain_hunter.models import Domain, Subdomain, Vulnerability
+from korug.db import get_db
+from korug.auth_utils import get_current_user
+from korug.audit import log_audit_event, AuditEvent
+from korug.models import Domain, Subdomain, Vulnerability
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

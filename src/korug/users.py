@@ -6,9 +6,9 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from subdomain_hunter.auth_utils import hash_password, verify_password
-from subdomain_hunter.config import get_settings
-from subdomain_hunter.models import User
+from korug.auth_utils import hash_password, verify_password
+from korug.config import get_settings
+from korug.models import User
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
