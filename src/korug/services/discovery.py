@@ -1,257 +1,257 @@
-"""Subdomain discovery service using Subfinder, Amass, and optional external APIs."""
+"""Passive subdomain discovery from many sources.
+
+Aggregates subdomains from free (no-key) third-party sources plus optional
+key-gated providers and the local Subfinder/Amass tools. Every source is
+best-effort: failures are logged and skipped so one bad source never fails a
+scan. DNS resolution and probing live in ``enrichment.py``.
+"""
+import asyncio
 import json
 import logging
+import re
 import subprocess
-from typing import Optional, Set
+from typing import Dict, Set
+
 import aiohttp
-import asyncio
 
 from korug.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Valid hostname label characters; used to clean source output.
+_HOST_RE = re.compile(r"^[a-z0-9._-]+$")
+
+
+def _clean(name: str, domain: str) -> str | None:
+    """Normalize a candidate hostname; return None if it isn't a subdomain."""
+    if not name:
+        return None
+    name = name.strip().lower().rstrip(".")
+    name = name.removeprefix("*.")
+    if "@" in name or "/" in name:
+        return None
+    if not _HOST_RE.match(name):
+        return None
+    if name == domain or name.endswith("." + domain):
+        return name
+    return None
+
 
 class DiscoveryService:
-    """Service for discovering subdomains from multiple sources."""
+    """Discover subdomains from local tools and passive web sources."""
 
     def __init__(self):
         self.subfinder_path = settings.subfinder_path
         self.amass_path = settings.amass_path
-        self.shodan_api_key = settings.shodan_api_key
-        self.urlscan_api_key = settings.urlscan_api_key
 
+    async def discover(self, domain: str) -> Dict[str, Set[str]]:
+        """Return a mapping of subdomain -> set of source names that found it."""
+        found: Dict[str, Set[str]] = {}
+
+        def merge(source: str, names: Set[str]):
+            for raw in names:
+                cleaned = _clean(raw, domain)
+                if cleaned:
+                    found.setdefault(cleaned, set()).add(source)
+
+        timeout = aiohttp.ClientTimeout(total=settings.api_timeout)
+        headers = {"User-Agent": "korug-recon/1.0"}
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            tasks = {
+                "crt.sh": self._crtsh(session, domain),
+                "hackertarget": self._hackertarget(session, domain),
+                "certspotter": self._certspotter(session, domain),
+                "rapiddns": self._rapiddns(session, domain),
+                "alienvault": self._alienvault(session, domain),
+                "threatminer": self._threatminer(session, domain),
+                "wayback": self._wayback(session, domain),
+                "bufferover": self._bufferover(session, domain),
+                "threatcrowd": self._threatcrowd(session, domain),
+            }
+            # Key-gated sources
+            if settings.virustotal_api_key:
+                tasks["virustotal"] = self._virustotal(session, domain)
+            if settings.securitytrails_api_key:
+                tasks["securitytrails"] = self._securitytrails(session, domain)
+            if settings.binaryedge_api_key:
+                tasks["binaryedge"] = self._binaryedge(session, domain)
+            if settings.urlscan_api_key:
+                tasks["urlscan"] = self._urlscan(session, domain)
+
+            results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+            for source, result in zip(tasks.keys(), results):
+                if isinstance(result, Exception):
+                    logger.warning("Source %s failed: %s", source, result)
+                else:
+                    merge(source, result)
+
+        # Local CLI tools (subprocess, run off the event loop)
+        merge("subfinder", await asyncio.to_thread(self._run_subfinder, domain))
+        merge("amass", await asyncio.to_thread(self._run_amass, domain))
+        if settings.shodan_api_key:
+            merge("shodan", await asyncio.to_thread(self._query_shodan, domain))
+
+        # Always include the apex domain itself.
+        found.setdefault(domain, set()).add("seed")
+
+        logger.info("Discovery for %s: %d unique names from %d sources",
+                    domain, len(found), len({s for srcs in found.values() for s in srcs}))
+        return found
+
+    # Backwards-compatible wrapper (older callers expected a dict with DNS records).
     async def discover_subdomains(self, domain: str) -> dict:
-        """
-        Discover subdomains using multiple sources.
-        
-        Args:
-            domain: Domain name to scan (e.g., 'example.com')
-            
-        Returns:
-            Dictionary with discovered subdomains and their DNS records
-        """
-        discovered = set()
-        
-        # Run Subfinder and Amass in parallel
-        subfinder_results = await self._run_subfinder(domain)
-        amass_results = await self._run_amass(domain)
-        
-        discovered.update(subfinder_results)
-        discovered.update(amass_results)
-        
-        # Add results from external APIs if configured
-        if self.shodan_api_key:
-            shodan_results = await self._query_shodan(domain)
-            discovered.update(shodan_results)
-        
-        if self.urlscan_api_key:
-            urlscan_results = await self._query_urlscan(domain)
-            discovered.update(urlscan_results)
-        
-        # Validate and resolve discovered subdomains
-        resolved_subdomains = await self._resolve_subdomains(discovered, domain)
-        
-        logger.info(f"Discovered {len(resolved_subdomains)} subdomains for {domain}")
-        
-        return {
-            "domain": domain,
-            "total_discovered": len(resolved_subdomains),
-            "subdomains": resolved_subdomains,
-        }
+        found = await self.discover(domain)
+        return {"domain": domain, "total_discovered": len(found),
+                "subdomains": {name: sorted(src) for name, src in found.items()}}
 
-    async def _run_subfinder(self, domain: str) -> Set[str]:
-        """Run Subfinder tool."""
-        results = set()
+    # ---- Free HTTP sources -------------------------------------------------
+
+    async def _get_json(self, session, url, **kw):
+        async with session.get(url, **kw) as resp:
+            if resp.status == 200:
+                return await resp.json(content_type=None)
+            return None
+
+    async def _get_text(self, session, url, **kw):
+        async with session.get(url, **kw) as resp:
+            if resp.status == 200:
+                return await resp.text()
+            return None
+
+    async def _crtsh(self, session, domain) -> Set[str]:
+        data = await self._get_json(session, f"https://crt.sh/?q=%25.{domain}&output=json")
+        out: Set[str] = set()
+        for row in data or []:
+            for field in (row.get("name_value", ""), row.get("common_name", "")):
+                for line in field.split("\n"):
+                    out.add(line)
+        return out
+
+    async def _hackertarget(self, session, domain) -> Set[str]:
+        text = await self._get_text(session, f"https://api.hackertarget.com/hostsearch/?q={domain}")
+        out: Set[str] = set()
+        if text and "error" not in text.lower() and "exceeded" not in text.lower():
+            for line in text.splitlines():
+                out.add(line.split(",")[0])
+        return out
+
+    async def _certspotter(self, session, domain) -> Set[str]:
+        url = (f"https://api.certspotter.com/v1/issuances?domain={domain}"
+               "&include_subdomains=true&expand=dns_names")
+        data = await self._get_json(session, url)
+        out: Set[str] = set()
+        for cert in data or []:
+            out.update(cert.get("dns_names", []))
+        return out
+
+    async def _rapiddns(self, session, domain) -> Set[str]:
+        text = await self._get_text(session, f"https://rapiddns.io/subdomain/{domain}?full=1")
+        if not text:
+            return set()
+        return set(re.findall(rf"[a-z0-9._-]+\.{re.escape(domain)}", text.lower()))
+
+    async def _alienvault(self, session, domain) -> Set[str]:
+        url = f"https://otx.alienvault.com/api/v1/indicators/domain/{domain}/passive_dns"
+        data = await self._get_json(session, url)
+        return {r.get("hostname", "") for r in (data or {}).get("passive_dns", [])}
+
+    async def _threatminer(self, session, domain) -> Set[str]:
+        data = await self._get_json(session, f"https://api.threatminer.org/v2/domain.php?q={domain}&rt=5")
+        return set((data or {}).get("results", []))
+
+    async def _wayback(self, session, domain) -> Set[str]:
+        url = (f"http://web.archive.org/cdx/search/cdx?url=*.{domain}/*"
+               "&output=text&fl=original&collapse=urlkey&limit=10000")
+        text = await self._get_text(session, url)
+        out: Set[str] = set()
+        for line in (text or "").splitlines():
+            m = re.search(r"https?://([^/]+)/?", line)
+            if m:
+                out.add(m.group(1).split(":")[0])
+        return out
+
+    async def _bufferover(self, session, domain) -> Set[str]:
+        data = await self._get_json(session, f"https://dns.bufferover.run/dns?q=.{domain}")
+        out: Set[str] = set()
+        for key in ("FDNS_A", "RDNS"):
+            for row in (data or {}).get(key, []) or []:
+                out.add(row.split(",")[-1])
+        return out
+
+    async def _threatcrowd(self, session, domain) -> Set[str]:
+        url = f"https://www.threatcrowd.org/searchApi/v2/domain/report/?domain={domain}"
+        data = await self._get_json(session, url)
+        return set((data or {}).get("subdomains", []))
+
+    # ---- Key-gated HTTP sources -------------------------------------------
+
+    async def _virustotal(self, session, domain) -> Set[str]:
+        url = f"https://www.virustotal.com/api/v3/domains/{domain}/subdomains?limit=1000"
+        headers = {"x-apikey": settings.virustotal_api_key}
+        data = await self._get_json(session, url, headers=headers)
+        return {item.get("id", "") for item in (data or {}).get("data", [])}
+
+    async def _securitytrails(self, session, domain) -> Set[str]:
+        url = f"https://api.securitytrails.com/v1/domain/{domain}/subdomains"
+        headers = {"APIKEY": settings.securitytrails_api_key}
+        data = await self._get_json(session, url, headers=headers)
+        return {f"{p}.{domain}" for p in (data or {}).get("subdomains", [])}
+
+    async def _binaryedge(self, session, domain) -> Set[str]:
+        url = f"https://api.binaryedge.io/v2/query/domains/subdomain/{domain}"
+        headers = {"X-Key": settings.binaryedge_api_key}
+        data = await self._get_json(session, url, headers=headers)
+        return set((data or {}).get("events", []))
+
+    async def _urlscan(self, session, domain) -> Set[str]:
+        url = f"https://urlscan.io/api/v1/search/?q=domain:{domain}&size=1000"
+        headers = {"API-Key": settings.urlscan_api_key}
+        data = await self._get_json(session, url, headers=headers)
+        return {r.get("page", {}).get("domain", "") for r in (data or {}).get("results", [])}
+
+    # ---- Local CLI tools ---------------------------------------------------
+
+    def _run_subfinder(self, domain: str) -> Set[str]:
+        results: Set[str] = set()
         try:
-            logger.info(f"Running Subfinder for {domain}")
-            result = subprocess.run(
-                [self.subfinder_path, "-d", domain, "-silent"],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            
-            if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
-                    if line.strip():
-                        results.add(line.strip())
-                logger.info(f"Subfinder found {len(results)} subdomains")
-            else:
-                logger.error(f"Subfinder error: {result.stderr}")
+            r = subprocess.run([self.subfinder_path, "-d", domain, "-silent"],
+                               capture_output=True, text=True, timeout=120)
+            if r.returncode == 0:
+                results.update(l.strip() for l in r.stdout.splitlines() if l.strip())
         except FileNotFoundError:
-            logger.warning(f"Subfinder not found at {self.subfinder_path}")
-        except subprocess.TimeoutExpired:
-            logger.error(f"Subfinder timeout for {domain}")
+            logger.warning("Subfinder not found at %s", self.subfinder_path)
         except Exception as e:
-            logger.error(f"Subfinder error: {e}")
-        
+            logger.warning("Subfinder error: %s", e)
         return results
 
-    async def _run_amass(self, domain: str) -> Set[str]:
-        """Run Amass tool."""
-        results = set()
+    def _run_amass(self, domain: str) -> Set[str]:
+        results: Set[str] = set()
         try:
-            logger.info(f"Running Amass for {domain}")
-            result = subprocess.run(
-                ["amass", "enum", "-d", domain, "-norecursive"],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            
-            if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
-                    if line.strip():
-                        # Amass output format: [name] subdomain.example.com
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            subdomain = parts[-1]
-                            if subdomain:
-                                results.add(subdomain)
-                logger.info(f"Amass found {len(results)} subdomains")
-            else:
-                logger.error(f"Amass error: {result.stderr}")
+            r = subprocess.run([self.amass_path, "enum", "-passive", "-d", domain, "-norecursive"],
+                               capture_output=True, text=True, timeout=180)
+            if r.returncode == 0:
+                for line in r.stdout.splitlines():
+                    parts = line.split()
+                    if parts:
+                        results.add(parts[-1])
         except FileNotFoundError:
-            logger.warning(f"Amass not found at {self.amass_path}")
-        except subprocess.TimeoutExpired:
-            logger.error(f"Amass timeout for {domain}")
+            logger.warning("Amass not found at %s", self.amass_path)
         except Exception as e:
-            logger.error(f"Amass error: {e}")
-        
+            logger.warning("Amass error: %s", e)
         return results
 
-    async def _query_shodan(self, domain: str) -> Set[str]:
-        """Query Shodan API for subdomains."""
-        results = set()
+    def _query_shodan(self, domain: str) -> Set[str]:
+        results: Set[str] = set()
         try:
-            if not self.shodan_api_key:
-                return results
-            
-            logger.info(f"Querying Shodan for {domain}")
             import shodan
-            
-            api = shodan.Shodan(self.shodan_api_key)
-            hostnames = api.search(f"hostname:{domain}")
-            
-            for result in hostnames.get("matches", []):
-                hostname = result.get("hostnames", [])
-                if hostname:
-                    results.update(hostname)
-            
-            logger.info(f"Shodan found {len(results)} subdomains")
+            api = shodan.Shodan(settings.shodan_api_key)
+            res = api.search(f"hostname:{domain}")
+            for match in res.get("matches", []):
+                results.update(match.get("hostnames", []))
         except Exception as e:
-            logger.error(f"Shodan API error: {e}")
-        
+            logger.warning("Shodan error: %s", e)
         return results
 
-    async def _query_urlscan(self, domain: str) -> Set[str]:
-        """Query urlscan.io API for subdomains."""
-        results = set()
-        try:
-            if not self.urlscan_api_key:
-                return results
-            
-            logger.info(f"Querying urlscan.io for {domain}")
-            
-            headers = {
-                "API-Key": self.urlscan_api_key,
-                "Content-Type": "application/json",
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                # Search for URLs with this domain
-                async with session.get(
-                    f"https://urlscan.io/api/v1/search/?q=domain:{domain}",
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=30),
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        for result in data.get("results", []):
-                            page = result.get("page", {})
-                            domain_name = page.get("domain")
-                            if domain_name:
-                                results.add(domain_name)
-            
-            logger.info(f"urlscan.io found {len(results)} subdomains")
-        except Exception as e:
-            logger.error(f"urlscan.io API error: {e}")
-        
-        return results
 
-    async def _resolve_subdomains(self, subdomains: Set[str], domain: str) -> dict:
-        """
-        Resolve subdomains and get their DNS records.
-        
-        Args:
-            subdomains: Set of discovered subdomains
-            domain: Parent domain name
-            
-        Returns:
-            Dictionary of subdomains with their DNS records
-        """
-        import dns.resolver
-        import dns.exception
-        
-        resolved = {}
-        
-        for subdomain in subdomains:
-            # Filter out entries not belonging to the target domain
-            if not subdomain.endswith(domain):
-                continue
-            
-            dns_records = {
-                "A": [],
-                "AAAA": [],
-                "CNAME": None,
-                "MX": [],
-                "NS": [],
-            }
-            
-            # Query A records
-            try:
-                a_answers = dns.resolver.resolve(subdomain, "A", raise_on_no_answer=False)
-                dns_records["A"] = [str(rdata) for rdata in a_answers]
-            except (dns.exception.DNSException, Exception):
-                pass
-            
-            # Query AAAA records
-            try:
-                aaaa_answers = dns.resolver.resolve(subdomain, "AAAA", raise_on_no_answer=False)
-                dns_records["AAAA"] = [str(rdata) for rdata in aaaa_answers]
-            except (dns.exception.DNSException, Exception):
-                pass
-            
-            # Query CNAME record
-            try:
-                cname_answers = dns.resolver.resolve(subdomain, "CNAME", raise_on_no_answer=False)
-                if cname_answers:
-                    dns_records["CNAME"] = str(cname_answers[0].target).rstrip(".")
-            except (dns.exception.DNSException, Exception):
-                pass
-            
-            # Query MX records
-            try:
-                mx_answers = dns.resolver.resolve(subdomain, "MX", raise_on_no_answer=False)
-                dns_records["MX"] = [str(rdata.exchange).rstrip(".") for rdata in mx_answers]
-            except (dns.exception.DNSException, Exception):
-                pass
-            
-            # Query NS records
-            try:
-                ns_answers = dns.resolver.resolve(subdomain, "NS", raise_on_no_answer=False)
-                dns_records["NS"] = [str(rdata.target).rstrip(".") for rdata in ns_answers]
-            except (dns.exception.DNSException, Exception):
-                pass
-            
-            # Only include subdomains that resolved to something
-            if any([dns_records["A"], dns_records["AAAA"], dns_records["CNAME"], 
-                   dns_records["MX"], dns_records["NS"]]):
-                resolved[subdomain] = dns_records
-        
-        return resolved
-
-
-# Create singleton instance
 discovery_service = DiscoveryService()

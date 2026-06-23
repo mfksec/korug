@@ -50,14 +50,26 @@ class Settings(BaseSettings):
     subfinder_path: str = Field(default="/usr/local/bin/subfinder")
     amass_path: str = Field(default="/usr/local/bin/amass")
     
-    # External APIs (Optional)
+    # External APIs (Optional) — free sources need no key; these unlock extra sources.
     shodan_api_key: Optional[str] = Field(default=None)
     urlscan_api_key: Optional[str] = Field(default=None)
-    
+    virustotal_api_key: Optional[str] = Field(default=None)
+    securitytrails_api_key: Optional[str] = Field(default=None)
+    censys_api_id: Optional[str] = Field(default=None)
+    censys_api_secret: Optional[str] = Field(default=None)
+    binaryedge_api_key: Optional[str] = Field(default=None)
+
     # Scanning Configuration
     scan_schedule_hour: int = Field(default=0)
     scan_schedule_minute: int = Field(default=0)
     confidence_threshold: float = Field(default=75.0)
+
+    # Recon / enrichment
+    enable_http_probe: bool = Field(default=True)      # status/title/tech via HTTP(S)
+    enable_port_scan: bool = Field(default=False)      # active TCP connect scan (opt-in)
+    port_scan_ports: str = Field(default="21,22,25,53,80,110,143,443,445,3306,3389,5432,6379,8080,8443")
+    enrichment_concurrency: int = Field(default=50)    # max concurrent probes/resolves
+    http_probe_timeout: int = Field(default=8)         # seconds per probe
     
     # AWS
     aws_region: str = Field(default="us-east-1")
