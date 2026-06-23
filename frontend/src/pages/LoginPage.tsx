@@ -16,16 +16,22 @@ interface LoginPageProps {
 }
 
 export const LoginPage: React.FC<LoginPageProps> = () => {
-  const { login, isLoading, error } = useAuth()
+  const { login, error } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const success = await login({ username, password })
-    if (success) {
-      navigate('/dashboard')
+    setIsLoading(true)
+    try {
+      const success = await login({ username, password })
+      if (success) {
+        navigate('/dashboard')
+      }
+    } finally {
+      setIsLoading(false)
     }
   }
 

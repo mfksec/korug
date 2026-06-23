@@ -30,7 +30,6 @@ import {
   Tooltip,
   Grid,
 } from '@mui/material'
-import { Navbar } from '@/components/common/Navbar'
 import { settingsAPI, type UserSettings, type APIKey } from '@/api/settings'
 import DeleteIcon from '@mui/icons-material/Delete'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
@@ -133,7 +132,6 @@ export const SettingsPage: React.FC = () => {
   if (loading) {
     return (
       <Box>
-        <Navbar />
         <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '500px' }}>
           <CircularProgress />
         </Container>
@@ -143,7 +141,6 @@ export const SettingsPage: React.FC = () => {
 
   return (
     <Box>
-      <Navbar />
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Typography variant="h4" sx={{ mb: 4, fontWeight: 'bold' }}>
           Settings

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { Container, Box, Tabs, Tab, Typography, CircularProgress, Alert, Button, Menu, MenuItem } from '@mui/material'
-import { Navbar } from '@/components/common/Navbar'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { vulnerabilityAPI } from '@/api/vulnerabilities'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
@@ -144,7 +143,6 @@ export const VulnerabilitiesPage: React.FC = () => {
   if (loading) {
     return (
       <Box>
-        <Navbar />
         <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '500px' }}>
           <CircularProgress />
         </Container>
@@ -154,7 +152,6 @@ export const VulnerabilitiesPage: React.FC = () => {
 
   return (
     <Box>
-      <Navbar />
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
