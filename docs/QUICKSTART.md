@@ -38,40 +38,46 @@ python -c "import secrets; print('API_KEY=' + secrets.token_urlsafe(32))"
 **PostgreSQL credentials.** The database user/password/name are set on the
 `postgres` container, and the API reaches it via `DATABASE_URL` — **the two must
 match**, and the host must be `postgres` (the compose service name), not
-`localhost`. In `docker/.env`:
+`localhost`. The `docker/.env.docker` defaults are user `postgres` / db `korug`:
 
 ```ini
-POSTGRES_USER=korug
+POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<a-strong-password>
 POSTGRES_DB=korug
 # Must match the three values above; host is the service name "postgres":
-DATABASE_URL=postgresql://korug:<a-strong-password>@postgres:5432/korug
+DATABASE_URL=postgresql://postgres:<a-strong-password>@postgres:5432/korug
 ```
 
 ```bash
 # Generate a strong DB password
 openssl rand -base64 24
 
-# Open a psql shell in the running database
-docker compose -f docker/docker-compose.yml exec postgres psql -U korug -d korug
-
-# Verify what the containers actually see
+# First, confirm the user/db the running containers actually use
 docker compose -f docker/docker-compose.yml exec postgres env | grep POSTGRES
 docker compose -f docker/docker-compose.yml exec korug-api printenv DATABASE_URL
+
+# Open a psql shell (use the POSTGRES_USER from above — `postgres` by default)
+docker compose -f docker/docker-compose.yml exec postgres psql -U postgres -d korug
 ```
 
-> **Gotcha:** `POSTGRES_PASSWORD` only initializes the password on the **first**
-> startup with an empty data volume. Changing it later in `docker/.env` does
-> **not** alter an already-created database. To change credentials on an
-> existing deployment, either rotate it in-place:
+> **Gotcha — credentials are baked in on first run.** `POSTGRES_USER`,
+> `POSTGRES_PASSWORD`, and `POSTGRES_DB` are only applied when the data volume is
+> **first** created (empty). Changing them in `docker/.env` later has **no
+> effect** on an existing database — the original role/password/db persist.
+> (A `psql -U korug` against a stock install fails with `role "korug" does not
+> exist` for exactly this reason — the default user is `postgres`.)
+>
+> To set a custom username, do it **before the first `up`** (or wipe the volume).
+> To change the **password** on an existing database, rotate it in-place:
 >
 > ```bash
 > docker compose -f docker/docker-compose.yml exec postgres \
->   psql -U korug -d korug -c "ALTER USER korug WITH PASSWORD 'new-password';"
-> # then update POSTGRES_PASSWORD + DATABASE_URL in docker/.env and: up -d
+>   psql -U postgres -d korug -c "ALTER USER postgres WITH PASSWORD 'new-password';"
+> # then set the same password in POSTGRES_PASSWORD + DATABASE_URL and: up -d
 > ```
 >
-> …or wipe and re-init from scratch (**destroys all data**):
+> Or wipe and re-init from scratch (**destroys all data**), which re-reads all
+> `POSTGRES_*` values:
 > `docker compose -f docker/docker-compose.yml down -v && docker compose -f docker/docker-compose.yml up -d`
 
 **Optional settings** (`docker/.env`):
