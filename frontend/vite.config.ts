@@ -25,10 +25,17 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'mui': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
-          'recharts': ['recharts'],
-        }
+        // Vite 8 (rolldown) requires manualChunks as a function, not an object.
+        manualChunks: (id) => {
+          if (!id.includes('node_modules')) return
+          if (id.includes('recharts')) return 'recharts'
+          if (
+            id.includes('@mui/material') ||
+            id.includes('@mui/icons-material') ||
+            id.includes('@emotion/react') ||
+            id.includes('@emotion/styled')
+          ) return 'mui'
+        },
       }
     }
   }
