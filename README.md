@@ -14,7 +14,7 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 
 **Passive discovery**
 - Aggregates subdomains from many free, no-key sources — crt.sh, HackerTarget, CertSpotter, RapidDNS, AlienVault OTX, ThreatMiner, Wayback, BufferOver, ThreatCrowd
-- Optional key-gated sources: VirusTotal, SecurityTrails, BinaryEdge, Censys, urlscan, Shodan; plus local Subfinder/Amass
+- Optional key-gated sources: VirusTotal, SecurityTrails, BinaryEdge, Censys, urlscan, Shodan; plus local Subfinder (Amass opt-in via `ENABLE_AMASS`)
 - Per-source attribution; every source is best-effort so one failure never fails a scan
 
 **Enrichment & detection**
@@ -27,6 +27,8 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 **Dashboard**
 - Redesigned React UI with a sidebar app shell and light/dark mode
 - Add, edit, and scan domains; per-scan opt-in port scanning
+- Live scan status with a Stop button — cancel an in-progress scan at any time
+- Assets page: a searchable, filterable list of every detected subdomain across all domains
 - Domain detail view: subdomains, IPs (grouped), HTTP/title/server, technologies, open ports, Cloudflare, vulnerabilities
 - Real-time analytics: 30-day discovery trend, severity distribution, and findings by type
 
