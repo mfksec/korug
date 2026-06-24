@@ -66,6 +66,8 @@ class Settings(BaseSettings):
 
     # Recon / enrichment
     enable_http_probe: bool = Field(default=True)      # status/title/tech via HTTP(S)
+    enable_subfinder: bool = Field(default=True)       # local subfinder CLI (fast, productive)
+    enable_amass: bool = Field(default=False)          # local amass CLI (slow; opt-in, best with API keys)
     enable_port_scan: bool = Field(default=False)      # active port scan (opt-in default)
     port_scan_ports: str = Field(default="21,22,25,53,80,110,143,443,445,3306,3389,5432,6379,8080,8443")
     enrichment_concurrency: int = Field(default=50)    # max concurrent probes/resolves

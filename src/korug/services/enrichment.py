@@ -12,7 +12,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import aiohttp
 
@@ -124,19 +124,57 @@ class EnrichmentService:
         self.http_timeout = settings.http_probe_timeout
         self.ports = [int(p) for p in str(settings.port_scan_ports).split(",") if p.strip().isdigit()]
 
-    async def enrich(self, names: List[str], port_scan: Optional[bool] = None) -> Dict[str, EnrichResult]:
-        """Enrich names. ``port_scan`` overrides the configured default when set."""
+    async def enrich(
+        self,
+        names: List[str],
+        port_scan: Optional[bool] = None,
+        should_cancel: Optional[Callable[[], bool]] = None,
+    ) -> Dict[str, EnrichResult]:
+        """Enrich names. ``port_scan`` overrides the configured default when set.
+
+        ``should_cancel`` is checked between batches so a long enrichment run can
+        be stopped promptly; when it returns True we return whatever finished so
+        far instead of processing the remaining names.
+        """
         do_ports = settings.enable_port_scan if port_scan is None else port_scan
         sem = asyncio.Semaphore(self.concurrency)
         timeout = aiohttp.ClientTimeout(total=self.http_timeout)
         connector = aiohttp.TCPConnector(ssl=False, limit=self.concurrency)
+        # Process in bounded batches so a very large name set doesn't schedule
+        # tens of thousands of tasks at once.
+        batch_size = max(self.concurrency * 5, 50)
+        results: Dict[str, EnrichResult] = {}
         async with aiohttp.ClientSession(timeout=timeout, connector=connector,
                                          headers={"User-Agent": "korug-recon/1.0"}) as session:
             async def run(name: str):
                 async with sem:
-                    return name, await self._enrich_one(session, name, do_ports)
-            pairs = await asyncio.gather(*(run(n) for n in names))
-        return dict(pairs)
+                    # Results are written as each name finishes so partial work
+                    # is preserved and in-flight tasks can be cancelled promptly.
+                    results[name] = await self._enrich_one(session, name, do_ports)
+
+            cancelled = False
+            for start in range(0, len(names), batch_size):
+                if should_cancel and should_cancel():
+                    cancelled = True
+                    break
+                batch = names[start:start + batch_size]
+                pending = {asyncio.create_task(run(n)) for n in batch}
+                # Poll for cancellation while the batch runs; on request, cancel
+                # the in-flight tasks rather than waiting for them to finish.
+                while pending:
+                    done, pending = await asyncio.wait(pending, timeout=2)
+                    if should_cancel and should_cancel():
+                        for t in pending:
+                            t.cancel()
+                        await asyncio.gather(*pending, return_exceptions=True)
+                        cancelled = True
+                        pending = set()
+                if cancelled:
+                    break
+            if cancelled:
+                logger.info("Enrichment cancelled after enriching %d/%d names",
+                            len(results), len(names))
+        return results
 
     async def _enrich_one(self, session, name: str, do_ports: bool) -> EnrichResult:
         result = EnrichResult()

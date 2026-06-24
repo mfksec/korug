@@ -6,6 +6,7 @@ import { ProtectedRoute } from '@/components/routing/ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { AssetsPage } from './pages/AssetsPage'
 import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -46,6 +47,7 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/assets" element={<AssetsPage />} />
           <Route path="/vulnerabilities" element={<VulnerabilitiesPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />

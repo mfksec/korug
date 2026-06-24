@@ -43,6 +43,32 @@ export interface IpGroup {
   count: number
 }
 
+export interface ScanStatus {
+  id: number
+  domain_id: number
+  status: string
+  is_active: boolean
+  scan_timestamp: string | null
+  total_subdomains: number
+  new_subdomains: number
+  vulnerabilities_found: number
+  scan_duration_seconds: number | null
+  error_message: string | null
+}
+
+export interface Asset extends EnrichedSubdomain {
+  domain_id: number
+  domain_name: string
+  resolves: boolean
+  last_seen: string | null
+}
+
+export interface AssetList {
+  total: number
+  count: number
+  assets: Asset[]
+}
+
 export interface ScanResults {
   domain: { id: number; domain_name: string; enabled: boolean; last_scanned: string | null }
   counts: { subdomains: number; alive: number; vulnerabilities: number; cloudflare: number }
@@ -75,6 +101,33 @@ export const scanAPI = {
     const response = await client.get<ScanHistory[]>(`/api/scans/history/${domain_id}`, {
       params: { skip, limit },
     })
+    return response.data
+  },
+
+  cancelScan: async (domain_id: number) => {
+    const response = await client.post(`/api/scans/${domain_id}/scan/cancel`)
+    return response.data
+  },
+
+  getStatus: async (domain_id: number): Promise<{ domain_id: number; last_scan: ScanStatus | null }> => {
+    const response = await client.get(`/api/scans/${domain_id}/scan/status`)
+    return response.data
+  },
+
+  getActiveScans: async (): Promise<ScanStatus[]> => {
+    const response = await client.get<ScanStatus[]>('/api/scans/active')
+    return response.data
+  },
+
+  listAssets: async (params: {
+    domain_id?: number
+    q?: string
+    alive?: boolean
+    resolved?: boolean
+    skip?: number
+    limit?: number
+  } = {}): Promise<AssetList> => {
+    const response = await client.get<AssetList>('/api/scans/assets', { params })
     return response.data
   },
 }

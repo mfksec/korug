@@ -7,6 +7,7 @@ import {
 } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
 import DashboardIcon from '@mui/icons-material/SpaceDashboard'
+import LanIcon from '@mui/icons-material/Lan'
 import SecurityIcon from '@mui/icons-material/GppMaybe'
 import NotificationsIcon from '@mui/icons-material/NotificationsActive'
 import PeopleIcon from '@mui/icons-material/People'
@@ -32,6 +33,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, section: 'Monitoring' },
+  { label: 'Assets', path: '/assets', icon: <LanIcon />, section: 'Monitoring' },
   { label: 'Vulnerabilities', path: '/vulnerabilities', icon: <SecurityIcon />, section: 'Monitoring' },
   { label: 'Alerts', path: '/alerts', icon: <NotificationsIcon />, section: 'Monitoring' },
   { label: 'Users', path: '/users', icon: <PeopleIcon />, adminOnly: true, section: 'Administration' },

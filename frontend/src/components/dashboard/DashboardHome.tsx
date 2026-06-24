@@ -3,12 +3,13 @@ import {
   Box, Grid, Paper, TextField, Button, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, IconButton, Dialog, DialogTitle,
   DialogContent, DialogActions, Chip, Tooltip, Stack, FormControlLabel,
-  Switch, Snackbar, Alert, Typography,
+  Switch, Snackbar, Alert, Typography, CircularProgress,
 } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import StopIcon from '@mui/icons-material/Stop'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import DomainIcon from '@mui/icons-material/Domain'
 import SecurityIcon from '@mui/icons-material/Security'
@@ -18,7 +19,7 @@ import { DomainDetailDialog } from './DomainDetailDialog'
 import { useDomains } from '@/hooks/useDomains'
 import { formatDate } from '@/utils/formatters'
 import { domainAPI, type DashboardStats } from '@/api/domains'
-import { scanAPI } from '@/api/scans'
+import { scanAPI, type ScanStatus } from '@/api/scans'
 import { apiErrorMessage } from '@/utils/apiError'
 import { Domain } from '@/types'
 
@@ -41,6 +42,10 @@ export const DashboardHome: React.FC = () => {
   const [scanStarting, setScanStarting] = useState(false)
   const [detailDomain, setDetailDomain] = useState<Domain | null>(null)
 
+  // domain_id -> live status for any running/cancelling scan
+  const [activeScans, setActiveScans] = useState<Record<number, ScanStatus>>({})
+  const [cancelling, setCancelling] = useState<Set<number>>(new Set())
+
   const fetchStats = async () => {
     try {
       setStats(await domainAPI.getDashboardStats())
@@ -49,10 +54,34 @@ export const DashboardHome: React.FC = () => {
     }
   }
 
+  // Poll for active scans so the table reflects running/cancelling state live.
+  // When a scan finishes (drops out of the active set), refresh domains + stats
+  // so "Last Scanned" and the counters update without a manual reload.
+  const refreshActive = React.useCallback(async () => {
+    try {
+      const active = await scanAPI.getActiveScans()
+      setActiveScans((prev) => {
+        const next: Record<number, ScanStatus> = {}
+        active.forEach((s) => { next[s.domain_id] = s })
+        const finished = Object.keys(prev).some((id) => !(Number(id) in next))
+        if (finished) { fetchDomains(); fetchStats() }
+        return next
+      })
+    } catch {
+      /* polling is best-effort */
+    }
+  }, [fetchDomains])
+
   useEffect(() => {
     fetchDomains()
     fetchStats()
   }, [fetchDomains])
+
+  useEffect(() => {
+    refreshActive()
+    const id = window.setInterval(refreshActive, 4000)
+    return () => window.clearInterval(id)
+  }, [refreshActive])
 
   const handleAddDomain = async () => {
     if (!newDomain.trim()) return
@@ -91,14 +120,40 @@ export const DashboardHome: React.FC = () => {
   const handleStartScan = async () => {
     if (!scanDomain) return
     setScanStarting(true)
+    const id = scanDomain.id
+    const name = scanDomain.domain_name
     try {
-      await scanAPI.triggerScan(scanDomain.id, scanPortScan)
-      setToast({ msg: `Scan started for ${scanDomain.domain_name}. Results appear in a few minutes.`, sev: 'success' })
+      await scanAPI.triggerScan(id, scanPortScan)
+      // Optimistically mark active so the row flips to "Scanning…" immediately,
+      // then confirm via the poller.
+      setActiveScans((prev) => ({
+        ...prev,
+        [id]: {
+          id: 0, domain_id: id, status: 'running', is_active: true,
+          scan_timestamp: null, total_subdomains: 0, new_subdomains: 0,
+          vulnerabilities_found: 0, scan_duration_seconds: null, error_message: null,
+        },
+      }))
+      setToast({ msg: `Scan started for ${name}. Progress shows live below.`, sev: 'success' })
       setScanDomain(null)
+      refreshActive()
     } catch (err) {
       setToast({ msg: apiErrorMessage(err, 'Failed to start scan'), sev: 'error' })
     } finally {
       setScanStarting(false)
+    }
+  }
+
+  const handleCancelScan = async (domain: Domain) => {
+    setCancelling((prev) => new Set(prev).add(domain.id))
+    try {
+      await scanAPI.cancelScan(domain.id)
+      setToast({ msg: `Cancelling scan for ${domain.domain_name}…`, sev: 'success' })
+      refreshActive()
+    } catch (err) {
+      setToast({ msg: apiErrorMessage(err, 'Failed to cancel scan'), sev: 'error' })
+    } finally {
+      setCancelling((prev) => { const n = new Set(prev); n.delete(domain.id); return n })
     }
   }
 
@@ -153,21 +208,42 @@ export const DashboardHome: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {domains.map((domain) => (
+                {domains.map((domain) => {
+                  const active = activeScans[domain.id]
+                  const isScanning = Boolean(active)
+                  const isCancelling = active?.status === 'cancelling' || cancelling.has(domain.id)
+                  return (
                   <TableRow key={domain.id} hover>
                     <TableCell sx={{ fontWeight: 500 }}>{domain.domain_name}</TableCell>
                     <TableCell>
-                      <Chip size="small" label={domain.enabled ? 'Active' : 'Inactive'}
-                            color={domain.enabled ? 'success' : 'default'} />
+                      {isScanning ? (
+                        <Chip size="small" color={isCancelling ? 'warning' : 'info'}
+                              icon={<CircularProgress size={12} color="inherit" />}
+                              label={isCancelling ? 'Cancelling…' : 'Scanning…'} />
+                      ) : (
+                        <Chip size="small" label={domain.enabled ? 'Active' : 'Inactive'}
+                              color={domain.enabled ? 'success' : 'default'} />
+                      )}
                     </TableCell>
                     <TableCell>{formatDate(domain.last_scanned)}</TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                        <Tooltip title="Run scan">
-                          <IconButton size="small" color="primary" onClick={() => openScan(domain)}>
-                            <PlayArrowIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
+                        {isScanning ? (
+                          <Tooltip title="Stop scan">
+                            <span>
+                              <IconButton size="small" color="error" onClick={() => handleCancelScan(domain)}
+                                          disabled={isCancelling}>
+                                <StopIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title="Run scan">
+                            <IconButton size="small" color="primary" onClick={() => openScan(domain)}>
+                              <PlayArrowIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                         <Tooltip title="View results">
                           <IconButton size="small" onClick={() => setDetailDomain(domain)}>
                             <VisibilityIcon fontSize="small" />
@@ -179,14 +255,16 @@ export const DashboardHome: React.FC = () => {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Delete">
-                          <IconButton size="small" color="error" onClick={() => setDeleteConfirm(domain.id)}>
+                          <IconButton size="small" color="error" onClick={() => setDeleteConfirm(domain.id)}
+                                      disabled={isScanning}>
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       </Stack>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
               </TableBody>
             </Table>
           </TableContainer>

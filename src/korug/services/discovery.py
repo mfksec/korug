@@ -6,11 +6,10 @@ best-effort: failures are logged and skipped so one bad source never fails a
 scan. DNS resolution and probing live in ``enrichment.py``.
 """
 import asyncio
-import json
 import logging
 import re
 import subprocess
-from typing import Dict, Set
+from typing import Callable, Dict, Optional, Set
 
 import aiohttp
 
@@ -45,8 +44,17 @@ class DiscoveryService:
         self.subfinder_path = settings.subfinder_path
         self.amass_path = settings.amass_path
 
-    async def discover(self, domain: str) -> Dict[str, Set[str]]:
-        """Return a mapping of subdomain -> set of source names that found it."""
+    async def discover(
+        self,
+        domain: str,
+        should_cancel: Optional[Callable[[], bool]] = None,
+    ) -> Dict[str, Set[str]]:
+        """Return a mapping of subdomain -> set of source names that found it.
+
+        ``should_cancel`` is polled while sources run; when it returns True the
+        in-flight source fetches are cancelled and discovery returns early with
+        whatever was gathered so far.
+        """
         found: Dict[str, Set[str]] = {}
 
         def merge(source: str, names: Set[str]):
@@ -58,7 +66,7 @@ class DiscoveryService:
         timeout = aiohttp.ClientTimeout(total=settings.api_timeout)
         headers = {"User-Agent": "korug-recon/1.0"}
         async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            tasks = {
+            coros = {
                 "crt.sh": self._crtsh(session, domain),
                 "hackertarget": self._hackertarget(session, domain),
                 "certspotter": self._certspotter(session, domain),
@@ -71,28 +79,52 @@ class DiscoveryService:
             }
             # Key-gated sources
             if settings.virustotal_api_key:
-                tasks["virustotal"] = self._virustotal(session, domain)
+                coros["virustotal"] = self._virustotal(session, domain)
             if settings.securitytrails_api_key:
-                tasks["securitytrails"] = self._securitytrails(session, domain)
+                coros["securitytrails"] = self._securitytrails(session, domain)
             if settings.binaryedge_api_key:
-                tasks["binaryedge"] = self._binaryedge(session, domain)
+                coros["binaryedge"] = self._binaryedge(session, domain)
             if settings.urlscan_api_key:
-                tasks["urlscan"] = self._urlscan(session, domain)
+                coros["urlscan"] = self._urlscan(session, domain)
             if settings.censys_api_id and settings.censys_api_secret:
-                tasks["censys"] = self._censys(session, domain)
+                coros["censys"] = self._censys(session, domain)
 
-            results = await asyncio.gather(*tasks.values(), return_exceptions=True)
-            for source, result in zip(tasks.keys(), results):
-                if isinstance(result, Exception):
-                    logger.warning("Source %s failed: %s", source, result)
+            # Local CLI tools run concurrently with the HTTP sources (off the
+            # event loop) so discovery time is max(sources) rather than the sum,
+            # and they participate in the same cancellation poll below.
+            # amass is opt-in: passive amass adds ~60s and yields little without
+            # configured data sources, so it's off by default (set ENABLE_AMASS).
+            if settings.enable_subfinder:
+                coros["subfinder"] = asyncio.to_thread(self._run_subfinder, domain)
+            if settings.enable_amass:
+                coros["amass"] = asyncio.to_thread(self._run_amass, domain)
+            if settings.shodan_api_key:
+                coros["shodan"] = asyncio.to_thread(self._query_shodan, domain)
+
+            names = list(coros.keys())
+            tasks = [asyncio.create_task(c) for c in coros.values()]
+            pending = set(tasks)
+            cancelled = False
+            while pending:
+                _, pending = await asyncio.wait(pending, timeout=2)
+                if should_cancel and should_cancel():
+                    for t in pending:
+                        t.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
+                    cancelled = True
+                    break
+            for source, task in zip(names, tasks):
+                if task.cancelled():
+                    continue
+                exc = task.exception()
+                if exc is not None:
+                    logger.warning("Source %s failed: %s", source, exc)
                 else:
-                    merge(source, result)
+                    merge(source, task.result())
 
-        # Local CLI tools (subprocess, run off the event loop)
-        merge("subfinder", await asyncio.to_thread(self._run_subfinder, domain))
-        merge("amass", await asyncio.to_thread(self._run_amass, domain))
-        if settings.shodan_api_key:
-            merge("shodan", await asyncio.to_thread(self._query_shodan, domain))
+        if cancelled:
+            logger.info("Discovery cancelled for %s after %d names", domain, len(found))
+            return found
 
         # Always include the apex domain itself.
         found.setdefault(domain, set()).add("seed")
@@ -234,7 +266,7 @@ class DiscoveryService:
         results: Set[str] = set()
         try:
             r = subprocess.run([self.subfinder_path, "-d", domain, "-silent"],
-                               capture_output=True, text=True, timeout=120)
+                               capture_output=True, text=True, timeout=60)
             if r.returncode == 0:
                 results.update(l.strip() for l in r.stdout.splitlines() if l.strip())
         except FileNotFoundError:
@@ -246,8 +278,8 @@ class DiscoveryService:
     def _run_amass(self, domain: str) -> Set[str]:
         results: Set[str] = set()
         try:
-            r = subprocess.run([self.amass_path, "enum", "-passive", "-d", domain, "-norecursive"],
-                               capture_output=True, text=True, timeout=180)
+            r = subprocess.run([self.amass_path, "enum", "-passive", "-d", domain, "-norecursive", "-timeout", "1"],
+                               capture_output=True, text=True, timeout=90)
             if r.returncode == 0:
                 for line in r.stdout.splitlines():
                     parts = line.split()

@@ -72,6 +72,27 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Admin seeding skipped: {e}")
 
+    # Reconcile scans orphaned by a previous restart. Background scan tasks do
+    # not survive a process restart, so any scan still marked running/cancelling
+    # is stale — mark it failed so the UI doesn't show a perpetual "Scanning…".
+    try:
+        from korug.models import ScanHistory
+        db = SessionLocal()
+        try:
+            stale = db.query(ScanHistory).filter(
+                ScanHistory.status.in_(("running", "cancelling"))
+            ).all()
+            for s in stale:
+                s.status = "failed"
+                s.error_message = "Interrupted by server restart"
+            if stale:
+                db.commit()
+                logger.info("Reconciled %d orphaned scan(s) on startup", len(stale))
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Scan reconciliation skipped: {e}")
+
     # Initialize scheduler if needed
     # scheduler.start()
     

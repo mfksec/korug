@@ -49,6 +49,26 @@ def _alert_message(subdomain: str, vuln_type: str, details: str | None) -> str:
     return f"{subdomain}: {summary}"
 
 
+# Scan lifecycle states. A scan moves running -> completed/failed, or a cancel
+# request flips running -> cancelling, which the background task observes
+# cooperatively and finalizes as cancelled.
+ACTIVE_STATUSES = ("running", "cancelling")
+
+
+class _ScanCancelled(Exception):
+    """Raised internally when a cancel request is observed mid-scan."""
+
+
+def _scan_cancel_requested(db: Session, scan_id: int) -> bool:
+    """Return True if a cancel was requested for this scan.
+
+    Issues a fresh SELECT so the long-running scan transaction observes the
+    commit made by a separate cancel request (PostgreSQL READ COMMITTED).
+    """
+    current = db.query(ScanHistory.status).filter(ScanHistory.id == scan_id).scalar()
+    return current in ("cancelling", "cancelled")
+
+
 async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = None):
     """Background task to perform a domain scan.
 
@@ -68,26 +88,45 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
         db.commit()
         
         start_time = datetime.utcnow()
-        
+
         try:
             # 1. Passive discovery across many sources
-            found = await discovery_service.discover(domain.domain_name)
+            found = await discovery_service.discover(
+                domain.domain_name,
+                should_cancel=lambda: _scan_cancel_requested(db, scan.id),
+            )
             names = list(found.keys())
 
-            # 2. Enrich: DNS resolution, HTTP probe, Cloudflare, ports
-            enriched = await enrichment_service.enrich(names, port_scan=port_scan)
+            if _scan_cancel_requested(db, scan.id):
+                raise _ScanCancelled()
+
+            # 2. Enrich: DNS resolution, HTTP probe, Cloudflare, ports.
+            #    Pass a cancel check so a long enrichment run stops promptly.
+            enriched = await enrichment_service.enrich(
+                names,
+                port_scan=port_scan,
+                should_cancel=lambda: _scan_cancel_requested(db, scan.id),
+            )
+
+            if _scan_cancel_requested(db, scan.id):
+                raise _ScanCancelled()
 
             new_subdomains = 0
             vulnerabilities_found = 0
             persisted = 0
 
-            for subdomain in names:
+            for idx, subdomain in enumerate(names):
+                # Cooperative cancellation: check periodically through the loop.
+                if idx % 25 == 0 and _scan_cancel_requested(db, scan.id):
+                    db.commit()  # keep whatever we've persisted so far
+                    raise _ScanCancelled()
+
                 res = enriched.get(subdomain)
-                # Only persist subdomains that actually resolve to something.
-                if not res or not res.resolved():
-                    continue
+                # Persist every discovered name, whether or not it currently
+                # resolves, so the full passive footprint is visible. Resolution
+                # state is captured via resolved_ips / is_alive.
                 persisted += 1
-                dns_records = res.dns_records
+                dns_records = res.dns_records if res else {}
 
                 existing = db.query(Subdomain).filter(
                     Subdomain.domain_id == domain_id,
@@ -108,16 +147,16 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                 db_subdomain.ns_records = json.dumps(dns_records.get("NS", []))
                 # Provenance + enrichment
                 db_subdomain.sources = ",".join(sorted(found.get(subdomain, [])))
-                db_subdomain.resolved_ips = json.dumps(res.resolved_ips)
-                db_subdomain.is_alive = res.is_alive
-                db_subdomain.status_code = res.status_code
-                db_subdomain.final_url = (res.final_url or None) and res.final_url[:512]
-                db_subdomain.http_title = res.http_title
-                db_subdomain.content_length = res.content_length
-                db_subdomain.web_server = (res.web_server or None) and res.web_server[:255]
-                db_subdomain.technologies = json.dumps(res.technologies)
-                db_subdomain.open_ports = json.dumps(res.open_ports)
-                db_subdomain.is_cloudflare = res.is_cloudflare
+                db_subdomain.resolved_ips = json.dumps(res.resolved_ips if res else [])
+                db_subdomain.is_alive = res.is_alive if res else False
+                db_subdomain.status_code = res.status_code if res else None
+                db_subdomain.final_url = (res.final_url or None) and res.final_url[:512] if res else None
+                db_subdomain.http_title = res.http_title if res else None
+                db_subdomain.content_length = res.content_length if res else None
+                db_subdomain.web_server = ((res.web_server or None) and res.web_server[:255]) if res else None
+                db_subdomain.technologies = json.dumps(res.technologies if res else [])
+                db_subdomain.open_ports = json.dumps(res.open_ports if res else [])
+                db_subdomain.is_cloudflare = res.is_cloudflare if res else False
                 db_subdomain.last_enriched = datetime.utcnow()
                 db.add(db_subdomain)
                 db.flush()
@@ -180,8 +219,16 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                 f"Scan completed for {domain.domain_name}: "
                 f"total={scan.total_subdomains}, new={new_subdomains}, vulns={vulnerabilities_found}"
             )
-            
+
+        except _ScanCancelled:
+            db.rollback()
+            logger.info(f"Scan cancelled for {domain.domain_name}")
+            scan.status = "cancelled"
+            scan.scan_duration_seconds = (datetime.utcnow() - start_time).total_seconds()
+            db.add(scan)
+            db.commit()
         except Exception as e:
+            db.rollback()
             logger.error(f"Scan error for {domain.domain_name}: {e}")
             scan.status = "failed"
             scan.error_message = str(e)
@@ -220,6 +267,148 @@ def trigger_scan(
     background_tasks.add_task(perform_scan, domain_id, db, port_scan)
 
     return {"message": f"Scan started for {domain.domain_name}", "domain_id": domain_id}
+
+
+def _scan_status_payload(scan: ScanHistory | None) -> dict | None:
+    if not scan:
+        return None
+    return {
+        "id": scan.id,
+        "domain_id": scan.domain_id,
+        "status": scan.status,
+        "is_active": scan.status in ACTIVE_STATUSES,
+        "scan_timestamp": scan.scan_timestamp.isoformat() + "Z" if scan.scan_timestamp else None,
+        "total_subdomains": scan.total_subdomains,
+        "new_subdomains": scan.new_subdomains,
+        "vulnerabilities_found": scan.vulnerabilities_found,
+        "scan_duration_seconds": scan.scan_duration_seconds,
+        "error_message": scan.error_message,
+    }
+
+
+@router.get("/active")
+def get_active_scans(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """List scans that are currently running or being cancelled.
+
+    Used by the UI to show live scan state across the domains table without
+    polling each domain individually.
+    """
+    scans = db.query(ScanHistory).filter(
+        ScanHistory.status.in_(ACTIVE_STATUSES)
+    ).all()
+    return [_scan_status_payload(s) for s in scans]
+
+
+@router.get("/{domain_id}/scan/status")
+def get_scan_status(
+    domain_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return the latest scan's status for a domain (for live polling)."""
+    domain = db.query(Domain).filter(Domain.id == domain_id).first()
+    if not domain:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Domain with id {domain_id} not found",
+        )
+    last_scan = db.query(ScanHistory).filter(
+        ScanHistory.domain_id == domain_id
+    ).order_by(ScanHistory.scan_timestamp.desc()).first()
+    return {"domain_id": domain_id, "last_scan": _scan_status_payload(last_scan)}
+
+
+@router.post("/{domain_id}/scan/cancel")
+def cancel_scan(
+    domain_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Request cancellation of the in-progress scan for a domain.
+
+    Cancellation is cooperative: the running background task observes the flag
+    between discovery, enrichment, and persistence steps and stops at the next
+    checkpoint, keeping any results already persisted.
+    """
+    domain = db.query(Domain).filter(Domain.id == domain_id).first()
+    if not domain:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Domain with id {domain_id} not found",
+        )
+
+    running = db.query(ScanHistory).filter(
+        ScanHistory.domain_id == domain_id,
+        ScanHistory.status == "running",
+    ).order_by(ScanHistory.scan_timestamp.desc()).first()
+
+    if not running:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No running scan to cancel for this domain",
+        )
+
+    running.status = "cancelling"
+    db.add(running)
+    db.commit()
+
+    log_audit_event(
+        AuditEvent.SCAN_TRIGGERED,
+        user=current_user['sub'],
+        resource_type="domain",
+        resource_id=domain_id,
+        details={"domain_name": domain.domain_name, "action": "cancel", "scan_id": running.id},
+    )
+
+    return {"message": f"Cancellation requested for {domain.domain_name}", "scan_id": running.id}
+
+
+@router.get("/assets")
+def list_assets(
+    domain_id: int | None = Query(None, description="Filter to a single domain"),
+    q: str | None = Query(None, description="Substring match on subdomain name"),
+    alive: bool | None = Query(None, description="Filter by HTTP-alive state"),
+    resolved: bool | None = Query(None, description="Filter by whether the name resolves"),
+    skip: int = 0,
+    limit: int = Query(500, le=2000),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """List discovered assets (subdomains) across all domains.
+
+    Powers the dedicated Assets page: a single searchable/filterable view of
+    every subdomain found, joined to its parent domain name.
+    """
+    query = db.query(Subdomain, Domain.domain_name).join(
+        Domain, Subdomain.domain_id == Domain.id
+    )
+    if domain_id is not None:
+        query = query.filter(Subdomain.domain_id == domain_id)
+    if q:
+        query = query.filter(Subdomain.subdomain.ilike(f"%{q}%"))
+    if alive is not None:
+        query = query.filter(Subdomain.is_alive.is_(alive))
+
+    total = query.count()
+    rows = query.order_by(Subdomain.subdomain.asc()).offset(skip).limit(limit).all()
+
+    assets = []
+    for sub, domain_name in rows:
+        item = _serialize_subdomain(sub)
+        item["domain_id"] = sub.domain_id
+        item["domain_name"] = domain_name
+        item["resolves"] = bool(item["resolved_ips"])
+        item["last_seen"] = sub.last_seen.isoformat() + "Z" if sub.last_seen else None
+        assets.append(item)
+
+    # `resolved` filters on derived state, so apply it after serialization.
+    if resolved is not None:
+        assets = [a for a in assets if a["resolves"] is resolved]
+
+    return {"total": total, "count": len(assets), "assets": assets}
 
 
 @router.get("/{domain_id}/results")
