@@ -5,16 +5,23 @@
 ```bash
 git clone https://github.com/mfksec/korug.git
 cd korug
-cp .env.example .env     # fill in the required values below
+cp docker/.env.docker docker/.env     # Docker config; set secrets + DB credentials
 docker compose -f docker/docker-compose.yml up -d --build
 curl http://localhost:8000/health
 ```
 
 Dashboard: http://localhost:3000 · API docs: http://localhost:8000/docs
 
+> Configure Docker via `docker/.env` (Compose loads its env file from the compose
+> file's directory). Use the `docker/.env.docker` template — its `DATABASE_URL`
+> points at the `postgres` service. The root `.env.example` is for non-Docker
+> local runs and targets `localhost`. See [Quick Start → Configuration &
+> credentials](QUICKSTART.md#configuration--credentials) for required secrets,
+> PostgreSQL credentials, and the full command set.
+
 ## Local development
 
-Requirements: Python 3.11+, Node.js 18+, PostgreSQL 14+ (or SQLite for testing), and Subfinder/Amass for discovery.
+Requirements: Python 3.11+, Node.js 20.19+ or 22.12+ (required by Vite 8), PostgreSQL 14+ (or SQLite for testing), and Subfinder/Amass for discovery.
 
 **Backend**
 
@@ -56,6 +63,7 @@ Set in `.env` (or the shell / `docker/.env.docker`). See [.env.example](../.env.
 | `SHODAN_API_KEY` / `URLSCAN_API_KEY` / `VIRUSTOTAL_API_KEY` / `SECURITYTRAILS_API_KEY` / `BINARYEDGE_API_KEY` | no | key-gated discovery sources (free sources need no key) |
 | `CENSYS_API_ID` / `CENSYS_API_SECRET` | no | Censys Search v2 source (both required) |
 | `SUBFINDER_PATH` / `AMASS_PATH` | no | tool locations |
+| `ENABLE_SUBFINDER` / `ENABLE_AMASS` | no | local CLI discovery tools; subfinder on by default, amass opt-in (off — slow, little value unconfigured) |
 | `ENABLE_HTTP_PROBE` | no | HTTP(S) probe of live subdomains (default true) |
 | `ENABLE_PORT_SCAN` / `PORT_SCAN_PORTS` | no | default port scan on/off + port list (also toggled per scan in the UI) |
 | `NMAP_PATH` / `NMAP_SERVICE_DETECTION` | no | nmap location + `-sV` service detection (falls back to a built-in TCP scan) |
