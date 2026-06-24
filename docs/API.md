@@ -46,7 +46,11 @@ Admin-only endpoints are marked 🔒.
 | Method | Path | |
 |--------|------|--|
 | POST | `/api/scans/{domain_id}/scan` | trigger scan (`?port_scan=true` to include a port scan) |
+| POST | `/api/scans/{domain_id}/scan/cancel` | request cancellation of the running scan (cooperative) |
+| GET | `/api/scans/{domain_id}/scan/status` | latest scan status for a domain (for live polling) |
+| GET | `/api/scans/active` | all currently running/cancelling scans |
 | GET | `/api/scans/{domain_id}/results` | enriched results: subdomains, IP groups, vulnerabilities |
+| GET | `/api/scans/assets` | all discovered subdomains across domains (filters: `domain_id`, `q`, `alive`, `resolved`) |
 | GET | `/api/scans/history/{domain_id}` | scan history |
 
 ### Vulnerabilities

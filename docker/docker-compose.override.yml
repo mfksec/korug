@@ -1,0 +1,10 @@
+# Local development overrides (auto-loaded by `docker compose`).
+# Mounts the backend source for live-reload so code changes don't need a rebuild.
+# Not used in production — deploy with the base docker-compose.yml only.
+services:
+  korug-api:
+    environment:
+      FASTAPI_DEBUG: "true"   # enables uvicorn --reload (see korug/run.py)
+      WORKERS: "1"            # single process so reload + background scans behave
+    volumes:
+      - ../src:/app/src       # live-mount backend code

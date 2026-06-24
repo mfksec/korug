@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Assets page**: a dedicated, searchable/filterable view of every discovered
+  subdomain across all domains (`GET /api/scans/assets`).
+- **Live scan status**: domain rows show a live "Scanning…" state, backed by
+  `GET /api/scans/active` and `GET /api/scans/{id}/scan/status`.
+- **Stop scan**: cooperative cancellation via `POST /api/scans/{id}/scan/cancel`;
+  both discovery and enrichment observe the request and stop promptly.
+- Startup reconciliation marks scans orphaned by a restart as `failed` instead
+  of leaving them stuck in `running`/`cancelling`.
+- `ENABLE_SUBFINDER` / `ENABLE_AMASS` settings to control local CLI discovery.
+- Docker dev override (`docker/docker-compose.override.yml`) for API live-reload.
+
+### Changed
+- Scans now persist **all** discovered subdomains (flagging resolve/alive state)
+  instead of dropping names that don't currently resolve.
+- Discovery runs the local CLI tools concurrently with the passive HTTP sources
+  rather than serially, and amass is now opt-in — large reduction in scan time.
+
 ## [0.1.0] - 2026-06-18
 
 ### Added
@@ -42,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Single scheduler instance (multi-instance scaling in v0.2.0)
 - No webhook support beyond Slack (planned for v0.2.0)
 
-## [Unreleased]
+## Roadmap
 
 ### Planned for v0.2.0
 - Web dashboard (React/Vue)
