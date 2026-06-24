@@ -53,7 +53,7 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 ```bash
 git clone https://github.com/mfksec/korug.git
 cd korug
-cp .env.example .env        # set DATABASE_URL, JWT_SECRET_KEY, API_KEY, ALLOWED_ORIGINS
+cp docker/.env.docker docker/.env   # Docker config; set JWT_SECRET_KEY, API_KEY, DB credentials
 docker compose -f docker/docker-compose.yml up -d --build
 ```
 

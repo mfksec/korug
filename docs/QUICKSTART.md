@@ -7,7 +7,7 @@ Get Körüg running with Docker in a few minutes.
 ```bash
 git clone https://github.com/mfksec/korug.git
 cd korug
-cp .env.example .env     # set DATABASE_URL, JWT_SECRET_KEY, API_KEY, ALLOWED_ORIGINS
+cp docker/.env.docker docker/.env     # Docker-ready config; edit secrets (see below)
 docker compose -f docker/docker-compose.yml up -d --build
 ```
 
@@ -15,6 +15,75 @@ docker compose -f docker/docker-compose.yml up -d --build
 |---------|-----|
 | Dashboard | http://localhost:3000 |
 | API docs (Swagger) | http://localhost:8000/docs |
+
+> **Use `docker/.env.docker`, not the root `.env.example`.** Compose loads its
+> env file from the compose file's directory (`docker/.env`), and the Docker
+> template points the database at the `postgres` **service** host. The root
+> `.env.example` is for non-Docker local runs and points at `localhost`, which
+> won't resolve from inside the API container.
+
+## Configuration & credentials
+
+All Docker settings live in `docker/.env` (copied from `docker/.env.docker`).
+Compose substitutes them into the stack via `${VAR}` references.
+
+**Required — set strong secrets before any real deployment:**
+
+```bash
+# Generate and drop these into docker/.env
+python -c "import secrets; print('JWT_SECRET_KEY=' + secrets.token_urlsafe(32))"
+python -c "import secrets; print('API_KEY=' + secrets.token_urlsafe(32))"
+```
+
+**PostgreSQL credentials.** The database user/password/name are set on the
+`postgres` container, and the API reaches it via `DATABASE_URL` — **the two must
+match**, and the host must be `postgres` (the compose service name), not
+`localhost`. In `docker/.env`:
+
+```ini
+POSTGRES_USER=korug
+POSTGRES_PASSWORD=<a-strong-password>
+POSTGRES_DB=korug
+# Must match the three values above; host is the service name "postgres":
+DATABASE_URL=postgresql://korug:<a-strong-password>@postgres:5432/korug
+```
+
+```bash
+# Generate a strong DB password
+openssl rand -base64 24
+
+# Open a psql shell in the running database
+docker compose -f docker/docker-compose.yml exec postgres psql -U korug -d korug
+
+# Verify what the containers actually see
+docker compose -f docker/docker-compose.yml exec postgres env | grep POSTGRES
+docker compose -f docker/docker-compose.yml exec korug-api printenv DATABASE_URL
+```
+
+> **Gotcha:** `POSTGRES_PASSWORD` only initializes the password on the **first**
+> startup with an empty data volume. Changing it later in `docker/.env` does
+> **not** alter an already-created database. To change credentials on an
+> existing deployment, either rotate it in-place:
+>
+> ```bash
+> docker compose -f docker/docker-compose.yml exec postgres \
+>   psql -U korug -d korug -c "ALTER USER korug WITH PASSWORD 'new-password';"
+> # then update POSTGRES_PASSWORD + DATABASE_URL in docker/.env and: up -d
+> ```
+>
+> …or wipe and re-init from scratch (**destroys all data**):
+> `docker compose -f docker/docker-compose.yml down -v && docker compose -f docker/docker-compose.yml up -d`
+
+**Optional settings** (`docker/.env`):
+
+| Variable | Purpose |
+|----------|---------|
+| `ADMIN_USERNAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | first-run admin seed; blank password → auto-generated and logged |
+| `ALLOWED_ORIGINS` | CORS origins for the dashboard (must include the URL you load the UI from) |
+| `VITE_API_BASE_URL` | API URL the browser calls; change from `http://localhost:8000` if deploying on a remote host (rebuild the UI after changing) |
+| `ENABLE_AMASS` / `ENABLE_SUBFINDER` | local CLI discovery tools (amass opt-in; off by default) |
+| `ENABLE_PORT_SCAN` / `PORT_SCAN_PORTS` | active port scan default + ports |
+| `SHODAN_API_KEY` / `URLSCAN_API_KEY` / `VIRUSTOTAL_API_KEY` / `CENSYS_API_ID` + `CENSYS_API_SECRET` | optional key-gated discovery sources |
 
 ## 2. Get the admin password
 
@@ -35,7 +104,7 @@ docker exec korug_app python -m korug.cli add-domain example.com
 docker exec korug_app python -m korug.cli scan --domain example.com
 ```
 
-Findings then appear under **Vulnerabilities** and **Alerts**. Scans also run automatically on the daily schedule.
+A running scan shows a live **Scanning…** status with a **Stop** button on its row. Discovered subdomains appear on the **Assets** page (searchable, across all domains); takeover findings appear under **Vulnerabilities** and **Alerts**. Scans also run automatically on the daily schedule.
 
 ## 4. (Optional) Notifications
 

@@ -11,11 +11,15 @@ Open the dashboard, sign in with your username and password. First-time admin cr
 ### Dashboard
 At-a-glance stat cards — total domains, vulnerabilities, active scans, high-risk domains — plus the **Monitored Domains** table. Each row has actions:
 - **Run scan** ▶ — opens a dialog with an optional *Include port scan (active)* toggle, then starts the scan.
+- **Stop scan** ■ — while a scan runs, the row shows a live **Scanning…** status and the Run button becomes a Stop button; clicking it cancels the in-progress scan (any results already found are kept).
 - **View results** 👁 — opens the domain detail view.
 - **Edit** ✏️ — rename the domain or enable/disable it (disabled domains are skipped by scheduled scans).
 - **Delete** 🗑 — remove the domain and its results.
 
 Add a domain with **Add Domain**.
+
+### Assets
+A single, searchable list of every subdomain discovered across **all** your domains — the full passive footprint, including names that don't currently resolve. Search by name and filter by **Resolves** or **Alive**. Each row shows the parent domain, resolved IP(s), HTTP status, title/server, technologies, and the sources that found it (e.g. crt.sh, subfinder). Run a scan from the Dashboard, then check here to see results.
 
 **Domain detail** shows summary counts (subdomains / alive / vulnerabilities / Cloudflare) and three tabs: **Subdomains** (resolved IPs, HTTP status, title/server, technology chips, open ports with service/version, a Cloudflare badge, and a clickable live URL), **By IP** (subdomains grouped by shared address), and **Vulnerabilities**.
 
@@ -48,7 +52,7 @@ A record of security-relevant actions (logins, domain and user changes, scans, e
 
 ## Running scans
 
-Run a scan from the dashboard (**Run scan** ▶), the CLI (`korug scan --domain example.com`), the API (`POST /api/scans/{id}/scan`, add `?port_scan=true` to include a port scan), or the daily schedule (`SCAN_SCHEDULE_HOUR`/`MINUTE`).
+Run a scan from the dashboard (**Run scan** ▶), the CLI (`korug scan --domain example.com`), the API (`POST /api/scans/{id}/scan`, add `?port_scan=true` to include a port scan), or the daily schedule (`SCAN_SCHEDULE_HOUR`/`MINUTE`). A running scan can be stopped from its dashboard row (**Stop** ■) or `POST /api/scans/{id}/scan/cancel`; cancellation is cooperative and keeps whatever was already found.
 
 A scan: aggregates subdomains from all configured sources → resolves DNS and groups by IP → probes HTTP(S) (status/title/server, https→http fallback) → fingerprints technologies and flags Cloudflare → optionally port-scans → tests for takeover → stores results, raises alerts, and sends Slack/email notifications when enabled.
 
