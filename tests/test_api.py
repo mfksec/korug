@@ -130,7 +130,7 @@ def test_get_nonexistent_domain(client):
 
 
 def test_get_scan_results_empty(client):
-    """Test getting results after domain creation triggers discovery."""
+    """Test getting results for a new domain before any scan runs."""
     # Create domain
     create_response = client.post(
         "/api/domains/",
@@ -143,7 +143,7 @@ def test_get_scan_results_empty(client):
     data = response.json()
     assert data["domain"]["id"] == domain_id
     assert isinstance(data["subdomains"], list)
-    assert any(item["subdomain"] == "example.com" for item in data["subdomains"])
+    assert data["subdomains"] == []
     assert data["vulnerabilities"] == []
 
 
