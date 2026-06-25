@@ -18,6 +18,7 @@ const RECON_KEY_LABELS: Record<ReconKeyField, string> = {
   urlscan_api_key: 'urlscan.io API Key',
   censys_api_id: 'Censys API ID',
   censys_api_secret: 'Censys API Secret',
+  nvd_api_key: 'NVD API Key (CVE lookups)',
 }
 
 export const IntegrationsPage: React.FC = () => {

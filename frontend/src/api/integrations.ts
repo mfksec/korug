@@ -21,6 +21,7 @@ export interface EmailStatus {
 export const RECON_KEY_FIELDS = [
   'shodan_api_key', 'virustotal_api_key', 'securitytrails_api_key',
   'binaryedge_api_key', 'urlscan_api_key', 'censys_api_id', 'censys_api_secret',
+  'nvd_api_key',
 ] as const
 export type ReconKeyField = typeof RECON_KEY_FIELDS[number]
 
