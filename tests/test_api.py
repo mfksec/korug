@@ -145,6 +145,7 @@ def test_get_scan_results_empty(client):
     assert response.status_code == 200
     data = response.json()
     assert data["domain"]["id"] == domain_id
+    assert isinstance(data["subdomains"], list)
     assert data["subdomains"] == []
     assert data["vulnerabilities"] == []
 
