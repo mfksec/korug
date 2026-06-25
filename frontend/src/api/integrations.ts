@@ -18,9 +18,20 @@ export interface EmailStatus {
   to_addresses: string
 }
 
+export const RECON_KEY_FIELDS = [
+  'shodan_api_key', 'virustotal_api_key', 'securitytrails_api_key',
+  'binaryedge_api_key', 'urlscan_api_key', 'censys_api_id', 'censys_api_secret',
+] as const
+export type ReconKeyField = typeof RECON_KEY_FIELDS[number]
+
+// Masked status: `${field}` (masked value) + `${field}_configured` flag.
+export type ReconKeysStatus = Record<string, string | boolean>
+export type ReconKeysUpdate = Partial<Record<ReconKeyField, string | null>>
+
 export interface IntegrationsResponse {
   slack: SlackStatus
   email: EmailStatus
+  recon_keys: ReconKeysStatus
 }
 
 export interface SlackUpdate {
@@ -67,6 +78,11 @@ export const integrationAPI = {
 
   testEmail: async (): Promise<TestResult> => {
     const res = await client.post<TestResult>('/api/integrations/email/test')
+    return res.data
+  },
+
+  updateReconKeys: async (payload: ReconKeysUpdate): Promise<ReconKeysStatus> => {
+    const res = await client.put<ReconKeysStatus>('/api/integrations/recon-keys', payload)
     return res.data
   },
 }

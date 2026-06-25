@@ -15,6 +15,8 @@ os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3000")
 os.environ.pop("REDIS_URL", None)
 # Admin seeding disabled for tests (will create users explicitly)
 os.environ.setdefault("ADMIN_USERNAME", "")
+# Auto-discovery disabled in tests so domain CRUD doesn't perform network I/O.
+os.environ.setdefault("ENABLE_AUTO_DISCOVERY", "false")
 
 import pytest
 from sqlalchemy import create_engine

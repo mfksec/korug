@@ -90,10 +90,14 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
         start_time = datetime.utcnow()
 
         try:
-            # 1. Passive discovery across many sources
+            # 1. Passive discovery across many sources (UI-configured API keys
+            #    override the env defaults).
+            from korug.api.integrations import get_recon_keys
+            recon_keys = get_recon_keys(db)
             found = await discovery_service.discover(
                 domain.domain_name,
                 should_cancel=lambda: _scan_cancel_requested(db, scan.id),
+                keys=recon_keys,
             )
             names = list(found.keys())
 
