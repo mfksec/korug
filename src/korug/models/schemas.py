@@ -65,6 +65,21 @@ class EmailConfig(BaseModel):
     to_addresses: Optional[str] = None  # comma-separated recipients
 
 
+class ReconKeysConfig(BaseModel):
+    """Source API keys for key-gated discovery providers (set from the UI).
+
+    All optional; omit a field or send the mask sentinel to keep the stored
+    value. Stored in the DB and override the env-configured defaults.
+    """
+    shodan_api_key: Optional[str] = None
+    virustotal_api_key: Optional[str] = None
+    securitytrails_api_key: Optional[str] = None
+    binaryedge_api_key: Optional[str] = None
+    urlscan_api_key: Optional[str] = None
+    censys_api_id: Optional[str] = None
+    censys_api_secret: Optional[str] = None
+
+
 class IntegrationTestRequest(BaseModel):
     """Optional override config to validate before saving (else use stored)."""
     slack: Optional[SlackConfig] = None

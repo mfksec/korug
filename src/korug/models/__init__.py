@@ -31,6 +31,7 @@ from korug.models.schemas import (
     PasswordReset,
     SlackConfig,
     EmailConfig,
+    ReconKeysConfig,
     IntegrationTestRequest,
 )
 
@@ -54,6 +55,7 @@ __all__ = [
     "PasswordReset",
     "SlackConfig",
     "EmailConfig",
+    "ReconKeysConfig",
     "IntegrationTestRequest",
     "DomainCreate",
     "DomainUpdate",

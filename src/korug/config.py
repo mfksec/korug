@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     confidence_threshold: float = Field(default=75.0)
 
     # Recon / enrichment
+    enable_auto_discovery: bool = Field(default=True)  # auto-start discovery when a domain is added
     enable_http_probe: bool = Field(default=True)      # status/title/tech via HTTP(S)
     enable_subfinder: bool = Field(default=True)       # local subfinder CLI (fast, productive)
     enable_amass: bool = Field(default=False)          # local amass CLI (slow; opt-in, best with API keys)

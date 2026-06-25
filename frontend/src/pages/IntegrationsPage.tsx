@@ -6,9 +6,19 @@ import {
 } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import SaveIcon from '@mui/icons-material/Save'
-import { integrationAPI, IntegrationsResponse } from '@/api/integrations'
+import { integrationAPI, IntegrationsResponse, RECON_KEY_FIELDS, type ReconKeyField, type ReconKeysUpdate } from '@/api/integrations'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiErrorMessage } from '@/utils/apiError'
+
+const RECON_KEY_LABELS: Record<ReconKeyField, string> = {
+  shodan_api_key: 'Shodan API Key',
+  virustotal_api_key: 'VirusTotal API Key',
+  securitytrails_api_key: 'SecurityTrails API Key',
+  binaryedge_api_key: 'BinaryEdge API Key',
+  urlscan_api_key: 'urlscan.io API Key',
+  censys_api_id: 'Censys API ID',
+  censys_api_secret: 'Censys API Secret',
+}
 
 export const IntegrationsPage: React.FC = () => {
   const { isAdmin } = useAuth()
@@ -28,6 +38,10 @@ export const IntegrationsPage: React.FC = () => {
   })
   const [pwdConfigured, setPwdConfigured] = useState(false)
 
+  // Discovery source API keys: typed values (write-only) + configured flags
+  const [reconValues, setReconValues] = useState<Record<string, string>>({})
+  const [reconConfigured, setReconConfigured] = useState<Record<string, boolean>>({})
+
   const [busy, setBusy] = useState<string | null>(null)
 
   const apply = (data: IntegrationsResponse) => {
@@ -45,6 +59,10 @@ export const IntegrationsPage: React.FC = () => {
       to_addresses: data.email.to_addresses,
     })
     setPwdConfigured(data.email.password_configured)
+    const configured: Record<string, boolean> = {}
+    RECON_KEY_FIELDS.forEach((f) => { configured[f] = Boolean(data.recon_keys?.[`${f}_configured`]) })
+    setReconConfigured(configured)
+    setReconValues({})
   }
 
   const load = async () => {
@@ -99,6 +117,20 @@ export const IntegrationsPage: React.FC = () => {
     catch (err) { fail(err, 'Email test failed') } finally { setBusy(null) }
   }
 
+  const saveReconKeys = async () => {
+    setBusy('keys-save'); setError(null)
+    try {
+      // Send only fields the user typed; blanks keep the stored value.
+      const payload: ReconKeysUpdate = {}
+      RECON_KEY_FIELDS.forEach((f) => { if (reconValues[f]) payload[f] = reconValues[f] })
+      const res = await integrationAPI.updateReconKeys(payload)
+      const configured: Record<string, boolean> = {}
+      RECON_KEY_FIELDS.forEach((f) => { configured[f] = Boolean(res[`${f}_configured`]) })
+      setReconConfigured(configured); setReconValues({})
+      flash('Discovery API keys saved')
+    } catch (err) { fail(err, 'Failed to save API keys') } finally { setBusy(null) }
+  }
+
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
   }
@@ -108,7 +140,7 @@ export const IntegrationsPage: React.FC = () => {
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4">Integrations</Typography>
         <Typography variant="body2" color="text.secondary">
-          Send takeover alerts and scan summaries to Slack and email.
+          Send takeover alerts to Slack/email, and add API keys for extra discovery sources.
         </Typography>
       </Box>
 
@@ -198,6 +230,39 @@ export const IntegrationsPage: React.FC = () => {
                     {busy === 'email-test' ? 'Sending…' : 'Send test'}
                   </Button>
                 </Stack>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Discovery API keys */}
+        <Grid item xs={12}>
+          <Card>
+            <CardHeader
+              title="🔑 Discovery API Keys"
+              subheader="Optional keys unlock extra subdomain sources. Free sources (crt.sh, etc.) need no key. Stored server-side and write-only (masked on read)."
+            />
+            <CardContent>
+              <Grid container spacing={2}>
+                {RECON_KEY_FIELDS.map((f) => (
+                  <Grid item xs={12} sm={6} md={4} key={f}>
+                    <TextField
+                      label={RECON_KEY_LABELS[f]} type="password" fullWidth disabled={!isAdmin}
+                      value={reconValues[f] || ''}
+                      onChange={(e) => setReconValues((v) => ({ ...v, [f]: e.target.value }))}
+                      placeholder={reconConfigured[f] ? '•••••••• (configured — blank keeps it)' : 'Not set'}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+              <Divider sx={{ my: 2 }} />
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Button variant="contained" startIcon={<SaveIcon />} disabled={!isAdmin || busy === 'keys-save'} onClick={saveReconKeys}>
+                  {busy === 'keys-save' ? 'Saving…' : 'Save keys'}
+                </Button>
+                <Typography variant="caption" color="text.secondary">
+                  Censys needs both ID and Secret. Keys take effect on the next discovery run.
+                </Typography>
               </Stack>
             </CardContent>
           </Card>

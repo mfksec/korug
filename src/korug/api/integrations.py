@@ -16,7 +16,7 @@ from korug.db import get_db
 from korug.auth_utils import require_role, get_current_user
 from korug.audit import log_audit_event, AuditEvent
 from korug.config import get_settings
-from korug.models import IntegrationConfig, SlackConfig, EmailConfig
+from korug.models import IntegrationConfig, SlackConfig, EmailConfig, ReconKeysConfig
 from korug.services import email_integration
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,12 @@ router = APIRouter()
 settings = get_settings()
 
 MASK = "********"
+
+# Source API keys for key-gated discovery providers, stored under one row.
+RECON_FIELDS = [
+    "shodan_api_key", "virustotal_api_key", "securitytrails_api_key",
+    "binaryedge_api_key", "urlscan_api_key", "censys_api_id", "censys_api_secret",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +57,45 @@ def _load(db: Session, provider: str) -> dict:
             "from_address": stored.get("from_address", ""),
             "to_addresses": stored.get("to_addresses", ""),
         }
+    if provider == "recon_keys":
+        env_defaults = {
+            "shodan_api_key": settings.shodan_api_key,
+            "virustotal_api_key": settings.virustotal_api_key,
+            "securitytrails_api_key": settings.securitytrails_api_key,
+            "binaryedge_api_key": settings.binaryedge_api_key,
+            "urlscan_api_key": settings.urlscan_api_key,
+            "censys_api_id": settings.censys_api_id,
+            "censys_api_secret": settings.censys_api_secret,
+        }
+        return {f: (stored.get(f) or env_defaults.get(f) or "") for f in RECON_FIELDS}
     return stored
+
+
+def _recon_public(cfg: dict) -> dict:
+    """Masked view: per key, a *_configured flag and a masked placeholder."""
+    out: dict = {}
+    for f in RECON_FIELDS:
+        out[f"{f}_configured"] = bool(cfg.get(f))
+        out[f] = MASK if cfg.get(f) else ""
+    return out
+
+
+def get_recon_keys(db: Session) -> dict:
+    """Internal: DB-stored source keys mapped to discovery's expected names.
+
+    Returns only stored values (empty when unset); discovery merges env defaults.
+    """
+    row = db.query(IntegrationConfig).filter(IntegrationConfig.provider == "recon_keys").first()
+    stored = json.loads(row.config) if row and row.config else {}
+    return {
+        "shodan": stored.get("shodan_api_key") or "",
+        "virustotal": stored.get("virustotal_api_key") or "",
+        "securitytrails": stored.get("securitytrails_api_key") or "",
+        "binaryedge": stored.get("binaryedge_api_key") or "",
+        "urlscan": stored.get("urlscan_api_key") or "",
+        "censys_id": stored.get("censys_api_id") or "",
+        "censys_secret": stored.get("censys_api_secret") or "",
+    }
 
 
 def _save(db: Session, provider: str, cfg: dict, user: str) -> None:
@@ -100,7 +144,31 @@ def get_integrations(
     return {
         "slack": _slack_public(_load(db, "slack")),
         "email": _email_public(_load(db, "email")),
+        "recon_keys": _recon_public(_load(db, "recon_keys")),
     }
+
+
+@router.put("/recon-keys")
+def update_recon_keys(
+    body: ReconKeysConfig,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_role("admin")),
+):
+    """Update source API keys. Omit/mask a field to keep the stored value."""
+    current = _load(db, "recon_keys")
+    incoming = body.dict()
+    cfg: dict = {}
+    for f in RECON_FIELDS:
+        val = incoming.get(f)
+        cfg[f] = current.get(f, "") if val in (None, "", MASK) else val
+    cfg["enabled"] = any(cfg.get(f) for f in RECON_FIELDS)
+    _save(db, "recon_keys", cfg, current_user["sub"])
+    log_audit_event(
+        AuditEvent.INTEGRATION_UPDATED, user=current_user["sub"],
+        resource_type="integration", resource_id="recon_keys",
+        details={"configured": [f for f in RECON_FIELDS if cfg.get(f)]},
+    )
+    return _recon_public(cfg)
 
 
 # ---------------------------------------------------------------------------

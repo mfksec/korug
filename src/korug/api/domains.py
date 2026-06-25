@@ -95,9 +95,12 @@ def create_domain(
     logger.info(f"Domain {domain.domain_name} created by {current_user['sub']}")
 
     # Continuous monitoring: kick off subdomain discovery immediately so the
-    # operator sees assets without a manual scan step.
-    from korug.api.scans import perform_scan
-    background_tasks.add_task(perform_scan, db_domain.id, db, False)
+    # operator sees assets without a manual scan step. (Disabled in tests via
+    # ENABLE_AUTO_DISCOVERY so domain CRUD doesn't perform network I/O.)
+    from korug.config import get_settings
+    if get_settings().enable_auto_discovery:
+        from korug.api.scans import perform_scan
+        background_tasks.add_task(perform_scan, db_domain.id, db, False)
 
     return db_domain
 

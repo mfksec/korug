@@ -48,14 +48,17 @@ class DiscoveryService:
         self,
         domain: str,
         should_cancel: Optional[Callable[[], bool]] = None,
+        keys: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Set[str]]:
         """Return a mapping of subdomain -> set of source names that found it.
 
         ``should_cancel`` is polled while sources run; when it returns True the
         in-flight source fetches are cancelled and discovery returns early with
-        whatever was gathered so far.
+        whatever was gathered so far. ``keys`` overrides the env-configured
+        source API keys (e.g. ones set from the UI).
         """
         found: Dict[str, Set[str]] = {}
+        k = self._effective_keys(keys)
 
         def merge(source: str, names: Set[str]):
             for raw in names:
@@ -77,17 +80,17 @@ class DiscoveryService:
                 "bufferover": self._bufferover(session, domain),
                 "threatcrowd": self._threatcrowd(session, domain),
             }
-            # Key-gated sources
-            if settings.virustotal_api_key:
-                coros["virustotal"] = self._virustotal(session, domain)
-            if settings.securitytrails_api_key:
-                coros["securitytrails"] = self._securitytrails(session, domain)
-            if settings.binaryedge_api_key:
-                coros["binaryedge"] = self._binaryedge(session, domain)
-            if settings.urlscan_api_key:
-                coros["urlscan"] = self._urlscan(session, domain)
-            if settings.censys_api_id and settings.censys_api_secret:
-                coros["censys"] = self._censys(session, domain)
+            # Key-gated sources (keys from UI/DB override env defaults)
+            if k["virustotal"]:
+                coros["virustotal"] = self._virustotal(session, domain, k["virustotal"])
+            if k["securitytrails"]:
+                coros["securitytrails"] = self._securitytrails(session, domain, k["securitytrails"])
+            if k["binaryedge"]:
+                coros["binaryedge"] = self._binaryedge(session, domain, k["binaryedge"])
+            if k["urlscan"]:
+                coros["urlscan"] = self._urlscan(session, domain, k["urlscan"])
+            if k["censys_id"] and k["censys_secret"]:
+                coros["censys"] = self._censys(session, domain, k["censys_id"], k["censys_secret"])
 
             # Local CLI tools run concurrently with the HTTP sources (off the
             # event loop) so discovery time is max(sources) rather than the sum,
@@ -98,8 +101,8 @@ class DiscoveryService:
                 coros["subfinder"] = asyncio.to_thread(self._run_subfinder, domain)
             if settings.enable_amass:
                 coros["amass"] = asyncio.to_thread(self._run_amass, domain)
-            if settings.shodan_api_key:
-                coros["shodan"] = asyncio.to_thread(self._query_shodan, domain)
+            if k["shodan"]:
+                coros["shodan"] = asyncio.to_thread(self._query_shodan, domain, k["shodan"])
 
             names = list(coros.keys())
             tasks = [asyncio.create_task(c) for c in coros.values()]
@@ -138,6 +141,19 @@ class DiscoveryService:
         found = await self.discover(domain)
         return {"domain": domain, "total_discovered": len(found),
                 "subdomains": {name: sorted(src) for name, src in found.items()}}
+
+    def _effective_keys(self, override: Optional[Dict[str, str]]) -> Dict[str, str]:
+        """Merge UI/DB-provided source API keys over the env-configured defaults."""
+        o = override or {}
+        return {
+            "shodan": o.get("shodan") or settings.shodan_api_key or "",
+            "virustotal": o.get("virustotal") or settings.virustotal_api_key or "",
+            "securitytrails": o.get("securitytrails") or settings.securitytrails_api_key or "",
+            "binaryedge": o.get("binaryedge") or settings.binaryedge_api_key or "",
+            "urlscan": o.get("urlscan") or settings.urlscan_api_key or "",
+            "censys_id": o.get("censys_id") or settings.censys_api_id or "",
+            "censys_secret": o.get("censys_secret") or settings.censys_api_secret or "",
+        }
 
     # ---- Free HTTP sources -------------------------------------------------
 
@@ -220,34 +236,34 @@ class DiscoveryService:
 
     # ---- Key-gated HTTP sources -------------------------------------------
 
-    async def _virustotal(self, session, domain) -> Set[str]:
+    async def _virustotal(self, session, domain, api_key) -> Set[str]:
         url = f"https://www.virustotal.com/api/v3/domains/{domain}/subdomains?limit=1000"
-        headers = {"x-apikey": settings.virustotal_api_key}
+        headers = {"x-apikey": api_key}
         data = await self._get_json(session, url, headers=headers)
         return {item.get("id", "") for item in (data or {}).get("data", [])}
 
-    async def _securitytrails(self, session, domain) -> Set[str]:
+    async def _securitytrails(self, session, domain, api_key) -> Set[str]:
         url = f"https://api.securitytrails.com/v1/domain/{domain}/subdomains"
-        headers = {"APIKEY": settings.securitytrails_api_key}
+        headers = {"APIKEY": api_key}
         data = await self._get_json(session, url, headers=headers)
         return {f"{p}.{domain}" for p in (data or {}).get("subdomains", [])}
 
-    async def _binaryedge(self, session, domain) -> Set[str]:
+    async def _binaryedge(self, session, domain, api_key) -> Set[str]:
         url = f"https://api.binaryedge.io/v2/query/domains/subdomain/{domain}"
-        headers = {"X-Key": settings.binaryedge_api_key}
+        headers = {"X-Key": api_key}
         data = await self._get_json(session, url, headers=headers)
         return set((data or {}).get("events", []))
 
-    async def _urlscan(self, session, domain) -> Set[str]:
+    async def _urlscan(self, session, domain, api_key) -> Set[str]:
         url = f"https://urlscan.io/api/v1/search/?q=domain:{domain}&size=1000"
-        headers = {"API-Key": settings.urlscan_api_key}
+        headers = {"API-Key": api_key}
         data = await self._get_json(session, url, headers=headers)
         return {r.get("page", {}).get("domain", "") for r in (data or {}).get("results", [])}
 
-    async def _censys(self, session, domain) -> Set[str]:
+    async def _censys(self, session, domain, api_id, api_secret) -> Set[str]:
         """Censys Search v2 hosts API (HTTP basic auth with API id/secret)."""
         url = f"https://search.censys.io/api/v2/hosts/search?q={domain}&per_page=100"
-        auth = aiohttp.BasicAuth(settings.censys_api_id, settings.censys_api_secret)
+        auth = aiohttp.BasicAuth(api_id, api_secret)
         out: Set[str] = set()
         async with session.get(url, auth=auth) as resp:
             if resp.status != 200:
@@ -291,11 +307,11 @@ class DiscoveryService:
             logger.warning("Amass error: %s", e)
         return results
 
-    def _query_shodan(self, domain: str) -> Set[str]:
+    def _query_shodan(self, domain: str, api_key: str) -> Set[str]:
         results: Set[str] = set()
         try:
             import shodan
-            api = shodan.Shodan(settings.shodan_api_key)
+            api = shodan.Shodan(api_key)
             res = api.search(f"hostname:{domain}")
             for match in res.get("matches", []):
                 results.update(match.get("hostnames", []))
