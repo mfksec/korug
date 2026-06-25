@@ -71,17 +71,17 @@ export const AppLayout: React.FC = () => {
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Toolbar sx={{ px: 2.5 }}>
-        <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
-          🔍 Körüg
+        <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em', color: '#fff' }}>
+          𐰚 Körüg
         </Typography>
       </Toolbar>
-      <Divider />
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
       <Box sx={{ flexGrow: 1, overflowY: 'auto', py: 1 }}>
         {sections.map((section) => (
           <List
             key={section}
             subheader={
-              <ListSubheader disableSticky sx={{ bgcolor: 'transparent', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              <ListSubheader disableSticky sx={{ bgcolor: 'transparent', color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                 {section}
               </ListSubheader>
             }
@@ -90,12 +90,12 @@ export const AppLayout: React.FC = () => {
               const selected = location.pathname === item.path
               return (
                 <ListItemButton key={item.path} selected={selected} onClick={() => go(item.path)}>
-                  <ListItemIcon sx={{ minWidth: 38, color: selected ? 'primary.main' : 'text.secondary' }}>
+                  <ListItemIcon sx={{ minWidth: 38 }}>
                     {item.icon}
                   </ListItemIcon>
                   <ListItemText
                     primary={item.label}
-                    primaryTypographyProps={{ fontWeight: selected ? 700 : 500, color: selected ? 'primary.main' : 'text.primary' }}
+                    primaryTypographyProps={{ fontWeight: selected ? 700 : 500 }}
                   />
                 </ListItemButton>
               )
