@@ -8,7 +8,6 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
-import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import StopIcon from '@mui/icons-material/Stop'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import DomainIcon from '@mui/icons-material/Domain'
@@ -37,12 +36,9 @@ export const DashboardHome: React.FC = () => {
   const [editEnabled, setEditEnabled] = useState(true)
 
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
-  const [scanDomain, setScanDomain] = useState<Domain | null>(null)
-  const [scanPortScan, setScanPortScan] = useState(false)
-  const [scanStarting, setScanStarting] = useState(false)
   const [detailDomain, setDetailDomain] = useState<Domain | null>(null)
 
-  // domain_id -> live status for any running/cancelling scan
+  // domain_id -> live status for any in-progress discovery (auto or scheduled)
   const [activeScans, setActiveScans] = useState<Record<number, ScanStatus>>({})
   const [cancelling, setCancelling] = useState<Set<number>>(new Set())
 
@@ -90,7 +86,8 @@ export const DashboardHome: React.FC = () => {
       await addDomain(newDomain.trim())
       setNewDomain('')
       setOpenAdd(false)
-      setToast({ msg: 'Domain added', sev: 'success' })
+      setToast({ msg: 'Domain added — discovery started automatically.', sev: 'success' })
+      refreshActive()
     } catch (err) {
       setToast({ msg: apiErrorMessage(err, 'Failed to add domain'), sev: 'error' })
     } finally {
@@ -112,35 +109,6 @@ export const DashboardHome: React.FC = () => {
       setToast({ msg: 'Domain updated', sev: 'success' })
     } catch (err) {
       setToast({ msg: apiErrorMessage(err, 'Failed to update domain'), sev: 'error' })
-    }
-  }
-
-  const openScan = (d: Domain) => { setScanDomain(d); setScanPortScan(false) }
-
-  const handleStartScan = async () => {
-    if (!scanDomain) return
-    setScanStarting(true)
-    const id = scanDomain.id
-    const name = scanDomain.domain_name
-    try {
-      await scanAPI.triggerScan(id, scanPortScan)
-      // Optimistically mark active so the row flips to "Scanning…" immediately,
-      // then confirm via the poller.
-      setActiveScans((prev) => ({
-        ...prev,
-        [id]: {
-          id: 0, domain_id: id, status: 'running', is_active: true,
-          scan_timestamp: null, total_subdomains: 0, new_subdomains: 0,
-          vulnerabilities_found: 0, scan_duration_seconds: null, error_message: null,
-        },
-      }))
-      setToast({ msg: `Scan started for ${name}. Progress shows live below.`, sev: 'success' })
-      setScanDomain(null)
-      refreshActive()
-    } catch (err) {
-      setToast({ msg: apiErrorMessage(err, 'Failed to start scan'), sev: 'error' })
-    } finally {
-      setScanStarting(false)
     }
   }
 
@@ -219,29 +187,23 @@ export const DashboardHome: React.FC = () => {
                       {isScanning ? (
                         <Chip size="small" color={isCancelling ? 'warning' : 'info'}
                               icon={<CircularProgress size={12} color="inherit" />}
-                              label={isCancelling ? 'Cancelling…' : 'Scanning…'} />
+                              label={isCancelling ? 'Stopping…' : 'Discovering…'} />
                       ) : (
-                        <Chip size="small" label={domain.enabled ? 'Active' : 'Inactive'}
+                        <Chip size="small" label={domain.enabled ? 'Monitoring' : 'Paused'}
                               color={domain.enabled ? 'success' : 'default'} />
                       )}
                     </TableCell>
                     <TableCell>{formatDate(domain.last_scanned)}</TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                        {isScanning ? (
-                          <Tooltip title="Stop scan">
+                        {isScanning && (
+                          <Tooltip title="Stop discovery">
                             <span>
                               <IconButton size="small" color="error" onClick={() => handleCancelScan(domain)}
                                           disabled={isCancelling}>
                                 <StopIcon fontSize="small" />
                               </IconButton>
                             </span>
-                          </Tooltip>
-                        ) : (
-                          <Tooltip title="Run scan">
-                            <IconButton size="small" color="primary" onClick={() => openScan(domain)}>
-                              <PlayArrowIcon fontSize="small" />
-                            </IconButton>
                           </Tooltip>
                         )}
                         <Tooltip title="View results">
@@ -313,31 +275,6 @@ export const DashboardHome: React.FC = () => {
           <Button onClick={() => setDeleteConfirm(null)}>Cancel</Button>
           <Button onClick={() => deleteConfirm !== null && handleDeleteDomain(deleteConfirm)} color="error" variant="contained">
             Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Scan options */}
-      <Dialog open={Boolean(scanDomain)} onClose={() => !scanStarting && setScanDomain(null)} fullWidth maxWidth="xs">
-        <DialogTitle>Run scan</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Passive discovery + enrichment for <b>{scanDomain?.domain_name}</b>.
-          </Typography>
-          <FormControlLabel
-            control={<Switch checked={scanPortScan} onChange={(e) => setScanPortScan(e.target.checked)} />}
-            label="Include port scan (active)"
-          />
-          {scanPortScan && (
-            <Alert severity="warning" sx={{ mt: 1 }}>
-              Port scanning is an active probe. Only enable it for targets you are authorized to scan.
-            </Alert>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setScanDomain(null)} disabled={scanStarting}>Cancel</Button>
-          <Button onClick={handleStartScan} variant="contained" startIcon={<PlayArrowIcon />} disabled={scanStarting}>
-            {scanStarting ? 'Starting…' : 'Start scan'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -411,6 +411,88 @@ def list_assets(
     return {"total": total, "count": len(assets), "assets": assets}
 
 
+@router.post("/subdomain/{subdomain_id}/scan")
+async def scan_subdomain(
+    subdomain_id: int,
+    port_scan: bool | None = Query(None, description="Include a port scan for this host"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Re-scan a single subdomain: refresh DNS/HTTP/tech/ports + takeover check.
+
+    Runs inline (one host is quick) and returns the refreshed asset. CVE lookup
+    is layered on here in a later phase.
+    """
+    sub = db.query(Subdomain).filter(Subdomain.id == subdomain_id).first()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subdomain not found")
+
+    log_audit_event(
+        AuditEvent.SCAN_TRIGGERED,
+        user=current_user['sub'],
+        resource_type="subdomain",
+        resource_id=subdomain_id,
+        details={"subdomain": sub.subdomain, "port_scan": bool(port_scan)},
+    )
+
+    enriched = await enrichment_service.enrich([sub.subdomain], port_scan=port_scan)
+    res = enriched.get(sub.subdomain)
+    dns_records = res.dns_records if res else {}
+
+    sub.a_records = json.dumps(dns_records.get("A", []))
+    sub.aaaa_records = json.dumps(dns_records.get("AAAA", []))
+    sub.cname_record = dns_records.get("CNAME")
+    sub.mx_records = json.dumps(dns_records.get("MX", []))
+    sub.ns_records = json.dumps(dns_records.get("NS", []))
+    sub.resolved_ips = json.dumps(res.resolved_ips if res else [])
+    sub.is_alive = res.is_alive if res else False
+    sub.status_code = res.status_code if res else None
+    sub.final_url = ((res.final_url or None) and res.final_url[:512]) if res else None
+    sub.http_title = res.http_title if res else None
+    sub.content_length = res.content_length if res else None
+    sub.web_server = ((res.web_server or None) and res.web_server[:255]) if res else None
+    sub.technologies = json.dumps(res.technologies if res else [])
+    sub.open_ports = json.dumps(res.open_ports if res else [])
+    sub.is_cloudflare = res.is_cloudflare if res else False
+    sub.last_enriched = datetime.utcnow()
+    db.add(sub)
+    db.flush()
+
+    # Takeover detection for this host
+    vulns = await takeover_detector.check_takeover_risks(sub.subdomain, dns_records)
+    new_vulns = 0
+    for vuln in vulns:
+        existing = db.query(Vulnerability).filter(
+            Vulnerability.subdomain_id == sub.id,
+            Vulnerability.vuln_type == vuln["vuln_type"],
+        ).first()
+        if existing:
+            existing.confidence_score = vuln["confidence_score"]
+            existing.details = vuln["details"]
+            db.add(existing)
+            continue
+        new_vulns += 1
+        db_vuln = Vulnerability(
+            subdomain_id=sub.id, domain_id=sub.domain_id,
+            vuln_type=vuln["vuln_type"], confidence_score=vuln["confidence_score"],
+            details=vuln["details"],
+        )
+        db.add(db_vuln)
+        db.flush()
+        db.add(Alert(
+            domain_id=sub.domain_id, vulnerability_id=db_vuln.id, target=sub.subdomain,
+            alert_type=vuln["vuln_type"], severity=_severity_from_confidence(vuln["confidence_score"]),
+            message=_alert_message(sub.subdomain, vuln["vuln_type"], vuln["details"]),
+        ))
+
+    db.commit()
+    db.refresh(sub)
+    asset = _serialize_subdomain(sub)
+    asset["domain_id"] = sub.domain_id
+    asset["resolves"] = bool(asset["resolved_ips"])
+    return {"asset": asset, "new_vulnerabilities": new_vulns}
+
+
 @router.get("/{domain_id}/results")
 def get_scan_results(
     domain_id: int, 
@@ -484,6 +566,13 @@ def _serialize_subdomain(s: Subdomain) -> dict:
         "subdomain": s.subdomain,
         "sources": (s.sources or "").split(",") if s.sources else [],
         "resolved_ips": _json_list(s.resolved_ips) or _json_list(s.a_records),
+        "dns_records": {
+            "A": _json_list(s.a_records),
+            "AAAA": _json_list(s.aaaa_records),
+            "CNAME": s.cname_record,
+            "MX": _json_list(s.mx_records),
+            "NS": _json_list(s.ns_records),
+        },
         "cname": s.cname_record,
         "is_alive": bool(s.is_alive),
         "status_code": s.status_code,

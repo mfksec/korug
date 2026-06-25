@@ -56,9 +56,18 @@ export interface ScanStatus {
   error_message: string | null
 }
 
+export interface DnsRecords {
+  A: string[]
+  AAAA: string[]
+  CNAME: string | null
+  MX: string[]
+  NS: string[]
+}
+
 export interface Asset extends EnrichedSubdomain {
   domain_id: number
   domain_name: string
+  dns_records: DnsRecords
   resolves: boolean
   last_seen: string | null
 }
@@ -116,6 +125,12 @@ export const scanAPI = {
 
   getActiveScans: async (): Promise<ScanStatus[]> => {
     const response = await client.get<ScanStatus[]>('/api/scans/active')
+    return response.data
+  },
+
+  scanSubdomain: async (subdomain_id: number, portScan?: boolean): Promise<{ asset: Asset; new_vulnerabilities: number }> => {
+    const params = portScan === undefined ? {} : { port_scan: portScan }
+    const response = await client.post(`/api/scans/subdomain/${subdomain_id}/scan`, null, { params })
     return response.data
   },
 

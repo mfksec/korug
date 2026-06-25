@@ -2,7 +2,7 @@
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from korug.db import get_db
@@ -58,11 +58,12 @@ def get_dashboard_stats(
 
 @router.post("/", response_model=DomainResponse, status_code=status.HTTP_201_CREATED)
 def create_domain(
-    domain: DomainCreate, 
+    domain: DomainCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    """Create a new domain to monitor."""
+    """Create a new domain to monitor. Discovery starts automatically."""
     # Check if domain already exists
     existing = db.query(Domain).filter(Domain.domain_name == domain.domain_name).first()
     if existing:
@@ -92,6 +93,12 @@ def create_domain(
         details={"domain_name": domain.domain_name}
     )
     logger.info(f"Domain {domain.domain_name} created by {current_user['sub']}")
+
+    # Continuous monitoring: kick off subdomain discovery immediately so the
+    # operator sees assets without a manual scan step.
+    from korug.api.scans import perform_scan
+    background_tasks.add_task(perform_scan, db_domain.id, db, False)
+
     return db_domain
 
 

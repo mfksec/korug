@@ -93,14 +93,22 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Scan reconciliation skipped: {e}")
 
-    # Initialize scheduler if needed
-    # scheduler.start()
-    
+    # Continuous monitoring: periodic re-discovery of all enabled domains.
+    try:
+        from korug.scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        logger.error(f"Scheduler start skipped: {e}")
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down Körüg...")
-    # scheduler.shutdown()
+    try:
+        from korug.scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception as e:
+        logger.error(f"Scheduler stop skipped: {e}")
 
 
 def create_app() -> FastAPI:
