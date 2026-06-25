@@ -2,13 +2,15 @@ import React, { useCallback, useEffect, useState } from 'react'
 import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Chip, Stack, Typography, ToggleButtonGroup, ToggleButton, Link,
-  Tooltip, CircularProgress, InputAdornment, Button,
+  Tooltip, CircularProgress, InputAdornment, Button, IconButton, Snackbar, Alert,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import CloudIcon from '@mui/icons-material/Cloud'
+import RadarIcon from '@mui/icons-material/Radar'
 import { scanAPI, type Asset } from '@/api/scans'
 import { apiErrorMessage } from '@/utils/apiError'
+import { formatDate } from '@/utils/formatters'
 
 /** Only treat http(s) URLs as safe link targets (blocks javascript:/data: schemes). */
 const safeHref = (url: string | null): string | null => {
@@ -23,6 +25,24 @@ const safeHref = (url: string | null): string | null => {
 
 type LiveFilter = 'all' | 'alive' | 'resolved'
 
+/** Compact, scannable rendering of the non-address DNS records. */
+const DnsCell: React.FC<{ a: Asset }> = ({ a }) => {
+  const d = a.dns_records
+  const rows: string[] = []
+  if (d.CNAME) rows.push(`CNAME → ${d.CNAME}`)
+  if (d.MX?.length) rows.push(`MX: ${d.MX.join(', ')}`)
+  if (d.NS?.length) rows.push(`NS: ${d.NS.join(', ')}`)
+  if (d.AAAA?.length) rows.push(`AAAA: ${d.AAAA.length}`)
+  if (!rows.length) return <Typography variant="caption" color="text.secondary">—</Typography>
+  return (
+    <Stack spacing={0.25}>
+      {rows.map((r) => (
+        <Typography key={r} variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11 }} noWrap title={r}>{r}</Typography>
+      ))}
+    </Stack>
+  )
+}
+
 export const AssetsPage: React.FC = () => {
   const [assets, setAssets] = useState<Asset[]>([])
   const [total, setTotal] = useState(0)
@@ -30,6 +50,8 @@ export const AssetsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<LiveFilter>('all')
+  const [scanning, setScanning] = useState<Set<number>>(new Set())
+  const [toast, setToast] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -50,11 +72,28 @@ export const AssetsPage: React.FC = () => {
     }
   }, [q, filter])
 
-  // Debounce the search box; refetch on filter change immediately.
   useEffect(() => {
     const t = window.setTimeout(load, 300)
     return () => window.clearTimeout(t)
   }, [load])
+
+  const scanOne = async (asset: Asset) => {
+    setScanning((p) => new Set(p).add(asset.id))
+    try {
+      const { asset: updated, new_vulnerabilities } = await scanAPI.scanSubdomain(asset.id)
+      setAssets((prev) => prev.map((a) => (a.id === asset.id ? { ...a, ...updated } : a)))
+      setToast({
+        msg: new_vulnerabilities > 0
+          ? `${asset.subdomain}: ${new_vulnerabilities} new finding(s)`
+          : `${asset.subdomain} rescanned`,
+        sev: 'success',
+      })
+    } catch (err) {
+      setToast({ msg: apiErrorMessage(err, 'Scan failed'), sev: 'error' })
+    } finally {
+      setScanning((p) => { const n = new Set(p); n.delete(asset.id); return n })
+    }
+  }
 
   return (
     <Box>
@@ -91,7 +130,7 @@ export const AssetsPage: React.FC = () => {
         ) : assets.length === 0 ? (
           <Box sx={{ py: 6, textAlign: 'center' }}>
             <Typography color="text.secondary">
-              No assets yet. Run a scan on a domain from the Dashboard, then come back here.
+              No assets yet. Add a domain on the Dashboard — discovery starts automatically.
             </Typography>
           </Box>
         ) : (
@@ -101,17 +140,18 @@ export const AssetsPage: React.FC = () => {
                 Showing {assets.length} of {total} assets
               </Typography>
             </Box>
-            <TableContainer sx={{ maxHeight: '70vh' }}>
+            <TableContainer sx={{ maxHeight: '72vh' }}>
               <Table stickyHeader size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>Subdomain</TableCell>
                     <TableCell>Domain</TableCell>
                     <TableCell>IP(s)</TableCell>
-                    <TableCell>HTTP</TableCell>
-                    <TableCell>Title / Server</TableCell>
+                    <TableCell>DNS Records</TableCell>
+                    <TableCell>Server</TableCell>
                     <TableCell>Tech</TableCell>
-                    <TableCell>Sources</TableCell>
+                    <TableCell>Discovered</TableCell>
+                    <TableCell align="right">Scan</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -125,30 +165,35 @@ export const AssetsPage: React.FC = () => {
                           {a.is_cloudflare && (
                             <Tooltip title="Behind Cloudflare"><CloudIcon sx={{ fontSize: 15, color: 'warning.main' }} /></Tooltip>
                           )}
-                          {!a.resolves && <Chip size="small" variant="outlined" label="no DNS" sx={{ height: 18, fontSize: 10 }} />}
                           {a.is_alive && <Chip size="small" color="success" label="alive" sx={{ height: 18, fontSize: 10 }} />}
+                          {!a.resolves && <Chip size="small" variant="outlined" label="no DNS" sx={{ height: 18, fontSize: 10 }} />}
                         </Stack>
-                        {a.cname && <Typography variant="caption" color="text.secondary">CNAME → {a.cname}</Typography>}
                       </TableCell>
                       <TableCell sx={{ fontSize: '0.8rem' }}>{a.domain_name}</TableCell>
-                      <TableCell sx={{ fontSize: '0.8rem' }}>{a.resolved_ips.join(', ') || '—'}</TableCell>
-                      <TableCell>
-                        {a.status_code
-                          ? <Chip size="small" label={a.status_code}
-                                  color={a.status_code < 300 ? 'success' : a.status_code < 400 ? 'info' : a.status_code < 500 ? 'warning' : 'error'} />
-                          : <Chip size="small" label="—" variant="outlined" />}
-                      </TableCell>
-                      <TableCell sx={{ maxWidth: 220 }}>
-                        <Typography variant="body2" noWrap title={a.http_title || ''}>{a.http_title || '—'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{a.web_server || ''}</Typography>
+                      <TableCell sx={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>{a.resolved_ips.join(', ') || '—'}</TableCell>
+                      <TableCell sx={{ maxWidth: 240 }}><DnsCell a={a} /></TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem', maxWidth: 160 }}>
+                        <Typography variant="body2" noWrap title={a.web_server || ''}>{a.web_server || '—'}</Typography>
+                        {a.status_code != null && (
+                          <Chip size="small" label={a.status_code} sx={{ height: 18, fontSize: 10 }}
+                                color={a.status_code < 300 ? 'success' : a.status_code < 400 ? 'info' : a.status_code < 500 ? 'warning' : 'error'} />
+                        )}
                       </TableCell>
                       <TableCell sx={{ maxWidth: 180 }}>
                         <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
                           {a.technologies.slice(0, 4).map((t) => <Chip key={t} size="small" variant="outlined" label={t} />)}
+                          {a.technologies.length === 0 && '—'}
                         </Stack>
                       </TableCell>
-                      <TableCell sx={{ maxWidth: 160, fontSize: '0.72rem', color: 'text.secondary' }}>
-                        {a.sources.join(', ') || '—'}
+                      <TableCell sx={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{formatDate(a.first_discovered)}</TableCell>
+                      <TableCell align="right">
+                        <Tooltip title="Re-scan this subdomain (DNS, HTTP, tech, takeover)">
+                          <span>
+                            <IconButton size="small" color="primary" disabled={scanning.has(a.id)} onClick={() => scanOne(a)}>
+                              {scanning.has(a.id) ? <CircularProgress size={16} /> : <RadarIcon fontSize="small" />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -158,6 +203,11 @@ export const AssetsPage: React.FC = () => {
           </>
         )}
       </Paper>
+
+      <Snackbar open={Boolean(toast)} autoHideDuration={4000} onClose={() => setToast(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        {toast ? <Alert severity={toast.sev} onClose={() => setToast(null)}>{toast.msg}</Alert> : undefined}
+      </Snackbar>
     </Box>
   )
 }

@@ -16,30 +16,33 @@ scheduler = BackgroundScheduler()
 
 
 def scheduled_scan_task():
-    """Task to run scheduled scans for all enabled domains."""
+    """Continuous monitoring: re-run discovery for every enabled domain.
+
+    Runs in the scheduler's background thread, so each domain gets a fresh DB
+    session and its own event loop via ``asyncio.run``.
+    """
+    import asyncio
+    from korug.api.scans import perform_scan
+
     db: Session = SessionLocal()
     try:
-        logger.info("Starting scheduled scan task")
-        domains = db.query(Domain).filter(Domain.enabled == True).all()
-        
-        if not domains:
-            logger.info("No domains to scan")
-            return
-        
-        for domain in domains:
-            logger.info(f"Scheduling scan for {domain.domain_name}")
-            # Import here to avoid circular imports
-            from korug.api.scans import perform_scan
-            import asyncio
-            
-            # Run scan asynchronously
-            # Note: In production, this would be handled by a background task queue
-            logger.info(f"Scan for {domain.domain_name} would be queued")
-    
-    except Exception as e:
-        logger.error(f"Error in scheduled scan task: {e}")
+        domain_ids = [d.id for d in db.query(Domain).filter(Domain.enabled == True).all()]
     finally:
         db.close()
+
+    if not domain_ids:
+        logger.info("Scheduled re-discovery: no enabled domains")
+        return
+
+    logger.info("Scheduled re-discovery for %d domain(s)", len(domain_ids))
+    for did in domain_ids:
+        session = SessionLocal()
+        try:
+            asyncio.run(perform_scan(did, session, False))
+        except Exception as e:
+            logger.error("Scheduled re-discovery failed for domain %s: %s", did, e)
+        finally:
+            session.close()
 
 
 def start_scheduler():
