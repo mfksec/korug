@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Box, Tabs, Tab, Typography, CircularProgress, Alert, Button, Menu, MenuItem,
+import { Container, Box, Grid, Tabs, Tab, Typography, CircularProgress, Alert, Button, Menu, MenuItem,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Stack, Paper, Link } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { vulnerabilityAPI } from '@/api/vulnerabilities'
 import { Vulnerability } from '@/types'
+import { StatsCard } from '@/components/dashboard/StatsCard'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 
 /** Parse a vulnerability into a categorized, display-friendly finding. */
@@ -66,8 +67,10 @@ const TYPE_COLORS: Record<string, string> = {
 
 const SEVERITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']
 
-const FindingsPanel: React.FC<{ findings: Vulnerability[] }> = ({ findings }) => {
-  const parsed = findings.map(parseFinding)
+const FindingsPanel: React.FC<{ findings: Vulnerability[]; severityFilter: string }> = ({ findings, severityFilter }) => {
+  const parsed = findings
+    .map(parseFinding)
+    .filter((f) => severityFilter === 'ALL' || f.severity === severityFilter)
   const groups = ['Takeover', 'CVE'].map((cat) => ({
     cat,
     items: parsed
@@ -79,7 +82,9 @@ const FindingsPanel: React.FC<{ findings: Vulnerability[] }> = ({ findings }) =>
     return (
       <Box sx={{ py: 6, textAlign: 'center' }}>
         <Typography color="text.secondary">
-          No findings yet. Scan a subdomain from the Assets page to check it for takeover risks and CVEs.
+          {severityFilter === 'ALL'
+            ? 'No findings yet. Scan a subdomain from the Assets page to check it for takeover risks and CVEs.'
+            : `No ${severityFilter.toLowerCase()}-severity findings.`}
         </Typography>
       </Box>
     )
@@ -143,6 +148,7 @@ export const VulnerabilitiesPage: React.FC = () => {
   const legendStyle = { color: axisColor }
 
   const [tabValue, setTabValue] = useState(0)
+  const [severityFilter, setSeverityFilter] = useState('ALL')
   const [trendData, setTrendData] = useState<TimelineData[]>([])
   const [typeData, setTypeData] = useState<TypeData[]>([])
   const [confidenceData, setConfidenceData] = useState<ConfidenceData[]>([])
@@ -253,6 +259,17 @@ export const VulnerabilitiesPage: React.FC = () => {
     )
   }
 
+  // Severity breakdown derived from the findings actually shown (matches the table).
+  const parsedAll = findings.map(parseFinding)
+  const sevCount = (sev: string) => (sev === 'ALL' ? parsedAll.length : parsedAll.filter((f) => f.severity === sev).length)
+  const SEVERITY_CARDS = [
+    { key: 'ALL', label: 'All Findings', accent: theme.palette.primary.main },
+    { key: 'CRITICAL', label: 'Critical', accent: theme.palette.error.main },
+    { key: 'HIGH', label: 'High', accent: theme.palette.error.light },
+    { key: 'MEDIUM', label: 'Medium', accent: theme.palette.warning.main },
+    { key: 'LOW', label: 'Low', accent: theme.palette.info.main },
+  ]
+
   return (
     <Box>
       <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -291,9 +308,24 @@ export const VulnerabilitiesPage: React.FC = () => {
           <Tab label="Statistics" />
         </Tabs>
 
-        {/* Findings — categorized list (Takeover vs CVE) */}
+        {/* Findings — clickable severity summary + categorized list (Takeover vs CVE) */}
         {tabValue === 0 && (
-          <FindingsPanel findings={findings} />
+          <>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              {SEVERITY_CARDS.map((c) => (
+                <Grid item xs={6} sm={4} md={2.4} key={c.key}>
+                  <StatsCard
+                    title={c.label}
+                    value={sevCount(c.key)}
+                    accent={c.accent}
+                    selected={severityFilter === c.key}
+                    onClick={() => setSeverityFilter(c.key)}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+            <FindingsPanel findings={findings} severityFilter={severityFilter} />
+          </>
         )}
 
         {/* 30-Day Trend Chart */}
@@ -303,22 +335,28 @@ export const VulnerabilitiesPage: React.FC = () => {
               Vulnerabilities Discovered (Last 30 Days)
             </Typography>
             <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+              <AreaChart data={trendData}>
+                <defs>
+                  <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={chartColor} stopOpacity={0.45} />
+                    <stop offset="100%" stopColor={chartColor} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
                 <XAxis dataKey="date" tick={axisTick} stroke={gridColor} />
                 <YAxis tick={axisTick} stroke={gridColor} allowDecimals={false} />
                 <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: gridColor }} />
                 <Legend wrapperStyle={legendStyle} />
-                <Line
+                <Area
                   type="monotone"
                   dataKey="count"
                   stroke={chartColor}
                   strokeWidth={2}
-                  dot={{ fill: chartColor }}
+                  fill="url(#trendFill)"
                   activeDot={{ r: 5 }}
                   name="Vulnerabilities Found"
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </Box>
         )}
