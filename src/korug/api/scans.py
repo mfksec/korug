@@ -489,6 +489,56 @@ async def scan_subdomain(
             message=_alert_message(sub.subdomain, vuln["vuln_type"], vuln["details"]),
         ))
 
+    # CVE lookup (best-effort, keyword+version against NVD) for this host's
+    # fingerprinted software. Optional; runs only on this manual scan.
+    from korug.config import get_settings
+    if get_settings().enable_cve_scan and res:
+        from korug.services import cve as cve_service
+        from korug.api.integrations import get_recon_keys
+        nvd_key = get_recon_keys(db).get("nvd") or get_settings().nvd_api_key or None
+        try:
+            cves = await cve_service.lookup(res.web_server, res.technologies, api_key=nvd_key)
+        except Exception as e:
+            logger.warning("CVE lookup failed for %s: %s", sub.subdomain, e)
+            cves = []
+        for c in cves:
+            vuln_type = f"cve:{c['cve_id']}"
+            existing = db.query(Vulnerability).filter(
+                Vulnerability.subdomain_id == sub.id,
+                Vulnerability.vuln_type == vuln_type,
+            ).first()
+            score = float(c["cvss"]) * 10 if c.get("cvss") else 50.0
+            details = json.dumps({
+                "category": "cve",
+                "cve_id": c["cve_id"],
+                "cvss": c.get("cvss"),
+                "severity": c.get("severity"),
+                "product": c.get("product"),
+                "version": c.get("version"),
+                "summary": c.get("summary"),
+                "match": "keyword",
+                "message": f"{c.get('product')} {c.get('version')}: {c['cve_id']} ({c.get('severity')})",
+            })
+            if existing:
+                existing.confidence_score = score
+                existing.details = details
+                db.add(existing)
+                continue
+            new_vulns += 1
+            db_vuln = Vulnerability(
+                subdomain_id=sub.id, domain_id=sub.domain_id,
+                vuln_type=vuln_type, confidence_score=score, details=details,
+            )
+            db.add(db_vuln)
+            db.flush()
+            # Alert on the serious ones only.
+            if (c.get("severity") or "").upper() in ("HIGH", "CRITICAL"):
+                db.add(Alert(
+                    domain_id=sub.domain_id, vulnerability_id=db_vuln.id, target=sub.subdomain,
+                    alert_type="cve", severity=(c["severity"] or "high").lower(),
+                    message=f"{sub.subdomain}: {c['cve_id']} in {c.get('product')} {c.get('version')}",
+                ))
+
     db.commit()
     db.refresh(sub)
     asset = _serialize_subdomain(sub)

@@ -66,6 +66,8 @@ class Settings(BaseSettings):
 
     # Recon / enrichment
     enable_auto_discovery: bool = Field(default=True)  # auto-start discovery when a domain is added
+    enable_cve_scan: bool = Field(default=True)        # CVE lookup during a manual per-subdomain scan
+    nvd_api_key: str = Field(default="")               # optional NVD API key (raises CVE lookup rate limit)
     enable_http_probe: bool = Field(default=True)      # status/title/tech via HTTP(S)
     enable_subfinder: bool = Field(default=True)       # local subfinder CLI (fast, productive)
     enable_amass: bool = Field(default=False)          # local amass CLI (slow; opt-in, best with API keys)

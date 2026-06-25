@@ -55,7 +55,7 @@ export interface Vulnerability {
   id: number
   subdomain_id: number
   domain_id: number
-  vuln_type: 's3_bucket_takeover' | 'cname_orphan' | 'dns_orphan'
+  vuln_type: string  // takeover types (s3_bucket_takeover, cname_orphan, …) or "cve:CVE-…"
   confidence_score: number
   details: string | null
   found_at: string

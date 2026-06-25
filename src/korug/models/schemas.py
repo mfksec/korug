@@ -78,6 +78,7 @@ class ReconKeysConfig(BaseModel):
     urlscan_api_key: Optional[str] = None
     censys_api_id: Optional[str] = None
     censys_api_secret: Optional[str] = None
+    nvd_api_key: Optional[str] = None
 
 
 class IntegrationTestRequest(BaseModel):

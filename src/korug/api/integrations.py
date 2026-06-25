@@ -29,6 +29,7 @@ MASK = "********"
 RECON_FIELDS = [
     "shodan_api_key", "virustotal_api_key", "securitytrails_api_key",
     "binaryedge_api_key", "urlscan_api_key", "censys_api_id", "censys_api_secret",
+    "nvd_api_key",
 ]
 
 
@@ -66,6 +67,7 @@ def _load(db: Session, provider: str) -> dict:
             "urlscan_api_key": settings.urlscan_api_key,
             "censys_api_id": settings.censys_api_id,
             "censys_api_secret": settings.censys_api_secret,
+            "nvd_api_key": settings.nvd_api_key,
         }
         return {f: (stored.get(f) or env_defaults.get(f) or "") for f in RECON_FIELDS}
     return stored
@@ -95,6 +97,7 @@ def get_recon_keys(db: Session) -> dict:
         "urlscan": stored.get("urlscan_api_key") or "",
         "censys_id": stored.get("censys_api_id") or "",
         "censys_secret": stored.get("censys_api_secret") or "",
+        "nvd": stored.get("nvd_api_key") or "",
     }
 
 

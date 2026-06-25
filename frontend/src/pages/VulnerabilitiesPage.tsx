@@ -1,9 +1,31 @@
 import React, { useState, useEffect } from 'react'
-import { Container, Box, Tabs, Tab, Typography, CircularProgress, Alert, Button, Menu, MenuItem } from '@mui/material'
+import { Container, Box, Tabs, Tab, Typography, CircularProgress, Alert, Button, Menu, MenuItem,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Stack, Paper, Link } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { vulnerabilityAPI } from '@/api/vulnerabilities'
+import { Vulnerability } from '@/types'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
+
+/** Parse a vulnerability into a categorized, display-friendly finding. */
+const SEVERITY_COLOR: Record<string, 'error' | 'warning' | 'info' | 'default'> = {
+  CRITICAL: 'error', HIGH: 'error', MEDIUM: 'warning', LOW: 'info', UNKNOWN: 'default',
+}
+function parseFinding(v: Vulnerability) {
+  let d: Record<string, unknown> = {}
+  try { d = v.details ? JSON.parse(v.details) : {} } catch { /* details may be plain text */ }
+  const isCve = v.vuln_type.startsWith('cve:')
+  const severity = String(d.severity || (v.confidence_score >= 90 ? 'CRITICAL' : v.confidence_score >= 70 ? 'HIGH' : v.confidence_score >= 50 ? 'MEDIUM' : 'LOW')).toUpperCase()
+  return {
+    v,
+    category: isCve ? 'CVE' : 'Takeover',
+    label: isCve ? (d.cve_id as string) || v.vuln_type.slice(4) : v.vuln_type.replace(/_/g, ' '),
+    severity,
+    summary: (d.summary as string) || (d.message as string) || (typeof v.details === 'string' && v.details && v.details[0] !== '{' ? v.details : ''),
+    product: d.product ? `${d.product} ${d.version || ''}`.trim() : '',
+    cveId: isCve ? (d.cve_id as string) : '',
+  }
+}
 
 interface TimelineData {
   date: string
@@ -42,6 +64,69 @@ const TYPE_COLORS: Record<string, string> = {
   'Other': '#AA96DA',
 }
 
+const SEVERITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']
+
+const FindingsPanel: React.FC<{ findings: Vulnerability[] }> = ({ findings }) => {
+  const parsed = findings.map(parseFinding)
+  const groups = ['Takeover', 'CVE'].map((cat) => ({
+    cat,
+    items: parsed
+      .filter((f) => f.category === cat)
+      .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity)),
+  })).filter((g) => g.items.length > 0)
+
+  if (parsed.length === 0) {
+    return (
+      <Box sx={{ py: 6, textAlign: 'center' }}>
+        <Typography color="text.secondary">
+          No findings yet. Scan a subdomain from the Assets page to check it for takeover risks and CVEs.
+        </Typography>
+      </Box>
+    )
+  }
+
+  return (
+    <Stack spacing={3}>
+      {groups.map((g) => (
+        <Paper key={g.cat} variant="outlined" sx={{ borderRadius: 2 }}>
+          <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="h6">{g.cat === 'CVE' ? 'CVEs' : 'Subdomain Takeover'}</Typography>
+            <Chip size="small" label={g.items.length} />
+          </Box>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Severity</TableCell>
+                  <TableCell>{g.cat === 'CVE' ? 'CVE' : 'Type'}</TableCell>
+                  {g.cat === 'CVE' && <TableCell>Component</TableCell>}
+                  <TableCell>Details</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {g.items.map((f) => (
+                  <TableRow key={f.v.id} hover sx={{ opacity: f.v.is_false_positive ? 0.5 : 1 }}>
+                    <TableCell>
+                      <Chip size="small" label={f.severity} color={SEVERITY_COLOR[f.severity] || 'default'} />
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {f.cveId
+                        ? <Link href={`https://nvd.nist.gov/vuln/detail/${f.cveId}`} target="_blank" rel="noopener noreferrer" underline="hover">{f.label}</Link>
+                        : f.label}
+                    </TableCell>
+                    {g.cat === 'CVE' && <TableCell sx={{ fontSize: '0.82rem' }}>{f.product || '—'}</TableCell>}
+                    <TableCell sx={{ fontSize: '0.82rem', color: 'text.secondary', maxWidth: 520 }}>{f.summary || '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      ))}
+    </Stack>
+  )
+}
+
 export const VulnerabilitiesPage: React.FC = () => {
   const theme = useTheme()
   // Theme-aware tokens for recharts (which otherwise hardcodes light-mode grays)
@@ -62,6 +147,7 @@ export const VulnerabilitiesPage: React.FC = () => {
   const [typeData, setTypeData] = useState<TypeData[]>([])
   const [confidenceData, setConfidenceData] = useState<ConfidenceData[]>([])
   const [stats, setStats] = useState<VulnStats | null>(null)
+  const [findings, setFindings] = useState<Vulnerability[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [exportAnchor, setExportAnchor] = useState<null | HTMLElement>(null)
@@ -73,15 +159,17 @@ export const VulnerabilitiesPage: React.FC = () => {
         setError(null)
 
         // Fetch all data in parallel
-        const [trendResponse, statsResponse, confidenceResponse] = await Promise.all([
+        const [trendResponse, statsResponse, confidenceResponse, findingsResponse] = await Promise.all([
           vulnerabilityAPI.getTimeline(30),
           vulnerabilityAPI.getStats(),
           vulnerabilityAPI.getConfidenceDistribution(),
+          vulnerabilityAPI.list({ limit: 1000 }),
         ])
 
         setTrendData(trendResponse)
         setStats(statsResponse)
         setConfidenceData(confidenceResponse)
+        setFindings(findingsResponse)
 
         // Transform by_type data for pie chart
         const typeChartData: TypeData[] = Object.entries(statsResponse.by_type).map(([name, value]) => ({
@@ -196,14 +284,20 @@ export const VulnerabilitiesPage: React.FC = () => {
         )}
 
         <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 3 }}>
+          <Tab label={`Findings (${findings.length})`} />
           <Tab label="30-Day Trend" />
           <Tab label="By Type" />
           <Tab label="Confidence Score" />
           <Tab label="Statistics" />
         </Tabs>
 
-        {/* 30-Day Trend Chart */}
+        {/* Findings — categorized list (Takeover vs CVE) */}
         {tabValue === 0 && (
+          <FindingsPanel findings={findings} />
+        )}
+
+        {/* 30-Day Trend Chart */}
+        {tabValue === 1 && (
           <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               Vulnerabilities Discovered (Last 30 Days)
@@ -230,7 +324,7 @@ export const VulnerabilitiesPage: React.FC = () => {
         )}
 
         {/* Vulnerability Type Distribution */}
-        {tabValue === 1 && (
+        {tabValue === 2 && (
           <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               Vulnerabilities by Type
@@ -262,7 +356,7 @@ export const VulnerabilitiesPage: React.FC = () => {
         )}
 
         {/* Confidence Score Distribution */}
-        {tabValue === 2 && (
+        {tabValue === 3 && (
           <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               Vulnerabilities by Confidence Score
@@ -285,7 +379,7 @@ export const VulnerabilitiesPage: React.FC = () => {
         )}
 
         {/* Statistics */}
-        {tabValue === 3 && stats && (
+        {tabValue === 4 && stats && (
           <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
               Summary Statistics

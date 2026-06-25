@@ -130,14 +130,17 @@ def test_get_nonexistent_domain(client):
 
 
 def test_get_scan_results_empty(client):
-    """Test getting results for a new domain before any scan runs."""
-    # Create domain
+    """A freshly created domain has no results yet.
+
+    Auto-discovery is disabled in tests (ENABLE_AUTO_DISCOVERY=false) so domain
+    creation performs no network I/O; results are empty until a scan runs.
+    """
     create_response = client.post(
         "/api/domains/",
         json={"domain_name": "example.com"}
     )
     domain_id = create_response.json()["id"]
-    
+
     response = client.get(f"/api/scans/{domain_id}/results")
     assert response.status_code == 200
     data = response.json()
