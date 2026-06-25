@@ -14,6 +14,27 @@ const FONT_STACK = [
 ].join(',')
 
 /**
+ * Brand palette — turquoise + deep petrol, the single source of truth for
+ * brand colour. Adjust a value here and it propagates across the whole UI.
+ */
+export const BRAND = {
+  turquoise: '#0BA5A5',      // primary
+  turquoiseLight: '#3FC0C0',
+  turquoiseDark: '#078A8A',
+  petrol: '#0E2F33',         // dark sidebar / accent surface (used in both modes)
+  petrolDark: '#0A2125',
+  ink: '#14252A',            // near-black text with a teal undertone
+  // semantic (severity) colours
+  success: '#16A34A',
+  warning: '#F4B740',
+  error: '#E5484D',
+  info: '#0EA5E9',
+} as const
+
+/** Sidebar surface colour for the current mode (deep petrol, dark in both). */
+export const sidebarBg = (isDark: boolean): string => (isDark ? BRAND.petrolDark : BRAND.petrol)
+
+/**
  * Build the application theme for the given color mode.
  * Light and dark share the same brand hues; surfaces and text invert.
  */
@@ -23,20 +44,20 @@ export const createAppTheme = (mode: PaletteMode): Theme => {
   return createTheme({
     palette: {
       mode,
-      primary: { main: '#4f46e5', light: '#6366f1', dark: '#4338ca', contrastText: '#fff' },
-      secondary: { main: '#0ea5e9', light: '#38bdf8', dark: '#0284c7' },
-      success: { main: '#16a34a' },
-      warning: { main: '#f59e0b' },
-      error: { main: '#dc2626' },
-      info: { main: '#0ea5e9' },
+      primary: { main: BRAND.turquoise, light: BRAND.turquoiseLight, dark: BRAND.turquoiseDark, contrastText: '#fff' },
+      secondary: { main: BRAND.petrol, light: '#1F4A50', dark: BRAND.petrolDark, contrastText: '#fff' },
+      success: { main: BRAND.success },
+      warning: { main: BRAND.warning },
+      error: { main: BRAND.error },
+      info: { main: BRAND.info },
       background: {
-        default: isDark ? '#0f1117' : '#f6f7fb',
-        paper: isDark ? '#171a21' : '#ffffff',
+        default: isDark ? '#0B1416' : '#F4F7F8',
+        paper: isDark ? '#12201F' : '#ffffff',
       },
-      divider: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)',
+      divider: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(14,47,51,0.10)',
       text: {
-        primary: isDark ? '#e6e8ee' : '#1e293b',
-        secondary: isDark ? '#9aa4b2' : '#64748b',
+        primary: isDark ? '#E6EEF0' : BRAND.ink,
+        secondary: isDark ? '#8FA3A6' : '#5A6B70',
       },
     },
     shape: { borderRadius: 12 },
@@ -81,8 +102,10 @@ export const createAppTheme = (mode: PaletteMode): Theme => {
         styleOverrides: {
           paper: {
             border: 'none',
-            backgroundColor: isDark ? '#13151c' : '#ffffff',
-            borderRight: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)'}`,
+            // Deep petrol sidebar in both modes — the brand's signature surface.
+            backgroundColor: sidebarBg(isDark),
+            color: 'rgba(255,255,255,0.82)',
+            borderRight: 'none',
           },
         },
       },
@@ -91,9 +114,14 @@ export const createAppTheme = (mode: PaletteMode): Theme => {
           root: {
             borderRadius: 10,
             marginInline: 8,
+            color: 'rgba(255,255,255,0.78)',
+            '& .MuiListItemIcon-root': { color: 'rgba(255,255,255,0.6)' },
+            '&:hover': { backgroundColor: 'rgba(255,255,255,0.06)' },
             '&.Mui-selected': {
-              backgroundColor: isDark ? 'rgba(99,102,241,0.16)' : 'rgba(79,70,229,0.10)',
-              '&:hover': { backgroundColor: isDark ? 'rgba(99,102,241,0.24)' : 'rgba(79,70,229,0.16)' },
+              backgroundColor: 'rgba(11,165,165,0.22)',
+              color: '#fff',
+              '& .MuiListItemIcon-root': { color: BRAND.turquoiseLight },
+              '&:hover': { backgroundColor: 'rgba(11,165,165,0.30)' },
             },
           },
         },

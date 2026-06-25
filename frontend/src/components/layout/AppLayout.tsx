@@ -1,9 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
-  AppBar, Avatar, Box, Divider, Drawer, IconButton, List, ListItemButton,
+  AppBar, Avatar, Badge, Box, Divider, Drawer, IconButton, InputBase, List, ListItemButton,
   ListItemIcon, ListItemText, Menu, MenuItem, Toolbar, Tooltip, Typography,
-  useMediaQuery, useTheme, ListSubheader,
+  useMediaQuery, useTheme, ListSubheader, alpha,
 } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
 import DashboardIcon from '@mui/icons-material/SpaceDashboard'
@@ -18,10 +18,16 @@ import LightModeIcon from '@mui/icons-material/LightMode'
 import DarkModeIcon from '@mui/icons-material/DarkMode'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonIcon from '@mui/icons-material/Person'
+import SearchIcon from '@mui/icons-material/Search'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import { useAuth } from '@/contexts/AuthContext'
 import { useColorMode } from '@/contexts/ColorModeContext'
+import { alertAPI } from '@/api/alerts'
 
 const DRAWER_WIDTH = 248
+const RAIL_WIDTH = 76
+const COLLAPSE_KEY = 'korug.sidebar.collapsed'
 
 interface NavItem {
   label: string
@@ -51,12 +57,47 @@ export const AppLayout: React.FC = () => {
   const { mode, toggle } = useColorMode()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
+  const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem(COLLAPSE_KEY) === '1')
+  const [search, setSearch] = useState('')
+  const [activeAlerts, setActiveAlerts] = useState(0)
+
+  // Mini (icon-only) rail applies on desktop when collapsed; mobile drawer is always full.
+  const mini = collapsed && isDesktop
+  const railWidth = collapsed ? RAIL_WIDTH : DRAWER_WIDTH
 
   const visibleItems = NAV_ITEMS.filter((i) => !i.adminOnly || isAdmin)
   const sections = Array.from(new Set(visibleItems.map((i) => i.section)))
 
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      localStorage.setItem(COLLAPSE_KEY, c ? '0' : '1')
+      return !c
+    })
+  }
+
+  const fetchAlertCount = useCallback(async () => {
+    try {
+      const stats = await alertAPI.getStats()
+      setActiveAlerts(stats.active)
+    } catch {
+      /* best-effort badge */
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchAlertCount()
+    const id = window.setInterval(fetchAlertCount, 30000)
+    return () => window.clearInterval(id)
+  }, [fetchAlertCount])
+
   const go = (path: string) => {
     navigate(path)
+    if (!isDesktop) setMobileOpen(false)
+  }
+
+  const submitSearch = () => {
+    const term = search.trim()
+    navigate(term ? `/assets?q=${encodeURIComponent(term)}` : '/assets')
     if (!isDesktop) setMobileOpen(false)
   }
 
@@ -70,52 +111,108 @@ export const AppLayout: React.FC = () => {
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Toolbar sx={{ px: 2.5 }}>
-        <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>
-          🔍 Körüg
+      <Toolbar sx={{ px: mini ? 0 : 2.5, justifyContent: mini ? 'center' : 'flex-start' }}>
+        <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em', color: '#fff' }}>
+          {mini ? '𐰚' : '𐰚 Körüg'}
         </Typography>
       </Toolbar>
-      <Divider />
-      <Box sx={{ flexGrow: 1, overflowY: 'auto', py: 1 }}>
+      <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
+      <Box sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', py: 1 }}>
         {sections.map((section) => (
           <List
             key={section}
             subheader={
-              <ListSubheader disableSticky sx={{ bgcolor: 'transparent', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                {section}
-              </ListSubheader>
+              mini ? undefined : (
+                <ListSubheader disableSticky sx={{ bgcolor: 'transparent', color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  {section}
+                </ListSubheader>
+              )
             }
           >
             {visibleItems.filter((i) => i.section === section).map((item) => {
               const selected = location.pathname === item.path
-              return (
-                <ListItemButton key={item.path} selected={selected} onClick={() => go(item.path)}>
-                  <ListItemIcon sx={{ minWidth: 38, color: selected ? 'primary.main' : 'text.secondary' }}>
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{ fontWeight: selected ? 700 : 500, color: selected ? 'primary.main' : 'text.primary' }}
-                  />
+              const button = (
+                <ListItemButton
+                  key={item.path}
+                  selected={selected}
+                  onClick={() => go(item.path)}
+                  sx={mini ? { justifyContent: 'center', mx: 1, px: 1.5 } : undefined}
+                >
+                  <ListItemIcon sx={{ minWidth: mini ? 0 : 38 }}>{item.icon}</ListItemIcon>
+                  {!mini && (
+                    <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: selected ? 700 : 500 }} />
+                  )}
                 </ListItemButton>
               )
+              return mini ? (
+                <Tooltip key={item.path} title={item.label} placement="right">{button}</Tooltip>
+              ) : button
             })}
           </List>
         ))}
       </Box>
+      {/* Collapse toggle (desktop only) */}
+      <Box sx={{ display: { xs: 'none', md: 'block' }, p: 1 }}>
+        <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mb: 1 }} />
+        <ListItemButton onClick={toggleCollapsed} sx={mini ? { justifyContent: 'center' } : undefined}>
+          <ListItemIcon sx={{ minWidth: mini ? 0 : 38 }}>
+            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+          </ListItemIcon>
+          {!mini && <ListItemText primary="Collapse" primaryTypographyProps={{ fontWeight: 500 }} />}
+        </ListItemButton>
+      </Box>
     </Box>
   )
 
+  const contentOffset = { md: `${railWidth}px` }
+  const contentWidth = { md: `calc(100% - ${railWidth}px)` }
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="fixed" sx={{ width: { md: `calc(100% - ${DRAWER_WIDTH}px)` }, ml: { md: `${DRAWER_WIDTH}px` } }}>
-        <Toolbar>
-          <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 2, display: { md: 'none' } }}>
+      <AppBar position="fixed" sx={{ width: contentWidth, ml: contentOffset, transition: 'width .2s ease, margin .2s ease' }}>
+        <Toolbar sx={{ gap: 1 }}>
+          <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1, display: { md: 'none' } }}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700, color: 'text.primary' }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>
             {visibleItems.find((i) => i.path === location.pathname)?.label || 'Körüg'}
           </Typography>
+
+          {/* Global search → Assets */}
+          <Box
+            sx={{
+              ml: { sm: 2 },
+              flexGrow: 1,
+              maxWidth: 460,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              height: 38,
+              borderRadius: 2,
+              bgcolor: (t) => alpha(t.palette.text.primary, t.palette.mode === 'dark' ? 0.06 : 0.04),
+              border: (t) => `1px solid ${t.palette.divider}`,
+            }}
+          >
+            <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+            <InputBase
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitSearch() }}
+              placeholder="Search subdomains…"
+              sx={{ flexGrow: 1, fontSize: 14, color: 'text.primary' }}
+            />
+          </Box>
+
+          <Box sx={{ flexGrow: { xs: 1, sm: 0 } }} />
+
+          <Tooltip title="Alerts">
+            <IconButton onClick={() => navigate('/alerts')} sx={{ color: 'text.secondary' }}>
+              <Badge badgeContent={activeAlerts} color="error" max={99}>
+                <NotificationsIcon />
+              </Badge>
+            </IconButton>
+          </Tooltip>
 
           <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             <IconButton onClick={toggle} sx={{ color: 'text.secondary' }}>
@@ -124,7 +221,7 @@ export const AppLayout: React.FC = () => {
           </Tooltip>
 
           <Tooltip title="Account">
-            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ ml: 1 }}>
+            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ ml: 0.5 }}>
               <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: 14, fontWeight: 700 }}>
                 {initials}
               </Avatar>
@@ -148,8 +245,8 @@ export const AppLayout: React.FC = () => {
         </Toolbar>
       </AppBar>
 
-      {/* Sidebar: permanent on desktop, temporary drawer on mobile */}
-      <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
+      {/* Sidebar: permanent (collapsible) on desktop, temporary drawer on mobile */}
+      <Box component="nav" sx={{ width: { md: railWidth }, flexShrink: { md: 0 }, transition: 'width .2s ease' }}>
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -162,14 +259,17 @@ export const AppLayout: React.FC = () => {
         <Drawer
           variant="permanent"
           open
-          sx={{ display: { xs: 'none', md: 'block' }, '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box' } }}
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            '& .MuiDrawer-paper': { width: railWidth, boxSizing: 'border-box', overflowX: 'hidden', transition: 'width .2s ease' },
+          }}
         >
           {drawer}
         </Drawer>
       </Box>
 
       {/* Main content */}
-      <Box component="main" sx={{ flexGrow: 1, width: { md: `calc(100% - ${DRAWER_WIDTH}px)` }, minWidth: 0 }}>
+      <Box component="main" sx={{ flexGrow: 1, width: contentWidth, minWidth: 0, transition: 'width .2s ease' }}>
         <Toolbar />
         <Box sx={{ p: { xs: 2, sm: 3 } }}>
           <Outlet />

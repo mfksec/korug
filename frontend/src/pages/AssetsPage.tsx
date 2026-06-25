@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Chip, Stack, Typography, ToggleButtonGroup, ToggleButton, Link,
@@ -48,7 +49,8 @@ export const AssetsPage: React.FC = () => {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [q, setQ] = useState('')
+  const [searchParams] = useSearchParams()
+  const [q, setQ] = useState(searchParams.get('q') ?? '')
   const [filter, setFilter] = useState<LiveFilter>('all')
   const [scanning, setScanning] = useState<Set<number>>(new Set())
   const [toast, setToast] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null)
@@ -71,6 +73,12 @@ export const AssetsPage: React.FC = () => {
       setLoading(false)
     }
   }, [q, filter])
+
+  // Sync the search box when arriving via the header search (?q=…).
+  useEffect(() => {
+    const term = searchParams.get('q') ?? ''
+    setQ((prev) => (prev === term ? prev : term))
+  }, [searchParams])
 
   useEffect(() => {
     const t = window.setTimeout(load, 300)
