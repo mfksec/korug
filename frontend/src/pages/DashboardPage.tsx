@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Grid, Card, CardContent, Box, Typography, Button, useTheme, Avatar,
+  Grid, Card, CardContent, Box, Typography, Button, useTheme, Avatar, LinearProgress,
 } from '@mui/material'
 import {
   BarChart, Bar, Cell, XAxis, ResponsiveContainer, PieChart, Pie, Tooltip as RTooltip,
@@ -13,21 +13,33 @@ import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
 import ChevronRightOutlined from '@mui/icons-material/ChevronRightOutlined'
 import { FONT_MONO } from '@/styles/theme'
 import { StatCard, vulnTypeMeta, confidenceColor, severityMeta } from '@/components/common/Widgets'
-import { mockDomains, mockVulnerabilities, mockAlerts, mockTrend } from '@/data/mock'
+import { fetchDashboard, type DashboardData } from '@/data/apiAdapters'
+import type { RiskLevel } from '@/types/domain'
 
 export function DashboardPage() {
   const theme = useTheme()
   const navigate = useNavigate()
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const totalSubs = useMemo(() => mockDomains.reduce((a, d) => a + d.subdomain_count, 0), [])
-  const openVulns = useMemo(() => mockVulnerabilities.filter((v) => v.status === 'open'), [])
-  const highRisk = mockDomains.filter((d) => d.risk === 'high').length
+  useEffect(() => {
+    fetchDashboard().then(setData).catch(() => setData(null)).finally(() => setLoading(false))
+  }, [])
+
+  const domains = data?.domains ?? []
+  const vulns = data?.vulnerabilities ?? []
+  const alerts = data?.alerts ?? []
+  const trend = data?.trend ?? []
+
+  const openVulns = vulns.filter((v) => v.status === 'open')
+  const activeDomains = domains.filter((d) => d.enabled).length
+  const highRisk = data?.stats.high_risk_domains ?? domains.filter((d) => d.risk === 'high').length
 
   const riskCounts = { high: 0, medium: 0, low: 0, none: 0 }
-  mockDomains.forEach((d) => { riskCounts[d.risk]++ })
+  domains.forEach((d) => { riskCounts[d.risk]++ })
   const riskColors = { high: theme.palette.error.main, medium: theme.palette.warning.main, low: theme.palette.success.main, none: theme.palette.divider }
   const riskLabels = { high: 'High risk', medium: 'Medium risk', low: 'Low risk', none: 'No issues' }
-  const pieData = (['high', 'medium', 'low', 'none'] as const).map((k) => ({ name: riskLabels[k], value: riskCounts[k], color: riskColors[k] }))
+  const pieData = (['high', 'medium', 'low', 'none'] as RiskLevel[]).map((k) => ({ name: riskLabels[k], value: riskCounts[k], color: riskColors[k] }))
 
   const SectionCard = ({ title, onView, children }: { title: string; onView: () => void; children: React.ReactNode }) => (
     <Card sx={{ height: '100%' }}>
@@ -41,10 +53,12 @@ export function DashboardPage() {
 
   return (
     <Box>
+      {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
+
       <Grid container spacing={2} sx={{ mb: 2.5 }}>
-        <Grid item xs={12} sm={6} md={3}><StatCard label="Domains" value={mockDomains.length} sub={`${mockDomains.filter((d) => d.enabled).length} actively monitored`} accent="secondary" icon={<PublicOutlined sx={{ fontSize: 17 }} />} /></Grid>
-        <Grid item xs={12} sm={6} md={3}><StatCard label="Subdomains" value={totalSubs} sub="across all sources" accent="info" icon={<DnsOutlined sx={{ fontSize: 17 }} />} /></Grid>
-        <Grid item xs={12} sm={6} md={3}><StatCard label="Open issues" value={openVulns.length} sub="awaiting triage" accent="error" icon={<GppMaybeOutlined sx={{ fontSize: 17 }} />} /></Grid>
+        <Grid item xs={12} sm={6} md={3}><StatCard label="Domains" value={data?.stats.total_domains ?? domains.length} sub={`${activeDomains} actively monitored`} accent="secondary" icon={<PublicOutlined sx={{ fontSize: 17 }} />} /></Grid>
+        <Grid item xs={12} sm={6} md={3}><StatCard label="Subdomains" value={data?.totalSubdomains ?? 0} sub="across all sources" accent="info" icon={<DnsOutlined sx={{ fontSize: 17 }} />} /></Grid>
+        <Grid item xs={12} sm={6} md={3}><StatCard label="Open issues" value={data?.stats.total_vulnerabilities ?? openVulns.length} sub="awaiting triage" accent="error" icon={<GppMaybeOutlined sx={{ fontSize: 17 }} />} /></Grid>
         <Grid item xs={12} sm={6} md={3}><StatCard label="High risk" value={highRisk} sub="domains need attention" accent="warning" icon={<WarningAmberOutlined sx={{ fontSize: 17 }} />} /></Grid>
       </Grid>
 
@@ -53,23 +67,23 @@ export function DashboardPage() {
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Typography variant="h6" sx={{ fontSize: 16 }}>Discovery activity</Typography>
-                <Typography sx={{ fontSize: 12, color: 'text.disabled' }}>Subdomains found · last 14 days</Typography>
+                <Typography variant="h6" sx={{ fontSize: 16 }}>Findings activity</Typography>
+                <Typography sx={{ fontSize: 12, color: 'text.disabled' }}>Vulnerabilities found · last 14 days</Typography>
               </Box>
               <Box sx={{ height: 170, mt: 2 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={mockTrend} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                  <BarChart data={trend} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: theme.palette.text.disabled, fontFamily: FONT_MONO }} />
                     <RTooltip cursor={{ fill: theme.palette.surface.subtle }} contentStyle={{ background: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 8, fontSize: 12 }} />
-                    <Bar dataKey="new_subdomains" radius={[4, 4, 0, 0]} maxBarSize={26}>
-                      {mockTrend.map((d, i) => <Cell key={i} fill={d.has_vulnerability ? theme.palette.error.main : theme.palette.brand.main} />)}
+                    <Bar dataKey="new_subdomains" name="Vulnerabilities" radius={[4, 4, 0, 0]} maxBarSize={26}>
+                      {trend.map((d, i) => <Cell key={i} fill={d.has_vulnerability ? theme.palette.error.main : theme.palette.brand.main} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </Box>
               <Box sx={{ display: 'flex', gap: 2.5, mt: 1.5, pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
-                <Legend color={theme.palette.brand.main} label="New subdomains" />
-                <Legend color={theme.palette.error.main} label="Day with new vulnerability" />
+                <Legend color={theme.palette.error.main} label="Vulnerabilities found" />
+                <Legend color={theme.palette.brand.main} label="Quiet day" />
               </Box>
             </CardContent>
           </Card>
@@ -88,7 +102,7 @@ export function DashboardPage() {
                     </PieChart>
                   </ResponsiveContainer>
                   <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <Typography sx={{ fontFamily: FONT_MONO, fontWeight: 700, fontSize: 24, lineHeight: 1 }}>{mockDomains.length}</Typography>
+                    <Typography sx={{ fontFamily: FONT_MONO, fontWeight: 700, fontSize: 24, lineHeight: 1 }}>{domains.length}</Typography>
                     <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>domains</Typography>
                   </Box>
                 </Box>
@@ -124,11 +138,12 @@ export function DashboardPage() {
                 </Box>
               )
             })}
+            {!loading && openVulns.length === 0 && <Box sx={{ p: 3, color: 'text.disabled', fontSize: 13 }}>No open vulnerabilities.</Box>}
           </SectionCard>
         </Grid>
         <Grid item xs={12} md={6}>
           <SectionCard title="Recent alerts" onView={() => navigate('/alerts')}>
-            {mockAlerts.slice(0, 4).map((a) => {
+            {alerts.slice(0, 4).map((a) => {
               const m = severityMeta(a.severity)
               const c = m.color === 'secondary' ? theme.palette.brand.text : theme.palette[m.color].main
               return (
@@ -142,6 +157,7 @@ export function DashboardPage() {
                 </Box>
               )
             })}
+            {!loading && alerts.length === 0 && <Box sx={{ p: 3, color: 'text.disabled', fontSize: 13 }}>No recent alerts.</Box>}
           </SectionCard>
         </Grid>
       </Grid>

@@ -1,16 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Box, Button, Table, TableBody, TableCell, TableHead, TableRow, TableContainer,
   Card, IconButton, TableSortLabel, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, InputAdornment, Typography, useTheme, Snackbar, Alert,
+  TextField, InputAdornment, Typography, useTheme, Snackbar, Alert, LinearProgress,
 } from '@mui/material'
 import AddOutlined from '@mui/icons-material/AddOutlined'
 import DeleteOutline from '@mui/icons-material/DeleteOutline'
 import PublicOutlined from '@mui/icons-material/PublicOutlined'
 import { FONT_MONO } from '@/styles/theme'
 import { SearchField, Segmented, RiskChip } from '@/components/common/Widgets'
-import { mockDomains } from '@/data/mock'
+import { fetchDomains, createDomain, deleteDomain } from '@/data/apiAdapters'
+import { apiErrorMessage } from '@/utils/apiError'
 import { Domain, RiskLevel } from '@/types/domain'
 
 type SortCol = 'domain_name' | 'subdomain_count' | 'open_vulnerabilities' | 'risk'
@@ -19,7 +20,8 @@ const riskRank: Record<RiskLevel, number> = { high: 3, medium: 2, low: 1, none: 
 export function DomainsPage() {
   const theme = useTheme()
   const navigate = useNavigate()
-  const [domains, setDomains] = useState<Domain[]>(mockDomains)
+  const [domains, setDomains] = useState<Domain[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'active' | 'issues' | 'high'>('all')
   const [sortBy, setSortBy] = useState<SortCol>('risk')
@@ -27,6 +29,18 @@ export function DomainsPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [addValue, setAddValue] = useState('')
   const [toast, setToast] = useState('')
+
+  const load = useCallback(async () => {
+    try {
+      setDomains(await fetchDomains())
+    } catch (err) {
+      setToast(apiErrorMessage(err, 'Failed to load domains'))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
 
   const rows = useMemo(() => {
     let list = domains.filter((d) => d.domain_name.toLowerCase().includes(search.toLowerCase()))
@@ -46,12 +60,26 @@ export function DomainsPage() {
     else { setSortBy(col); setDir(col === 'domain_name' ? 'asc' : 'desc') }
   }
 
-  const addDomain = () => {
+  const addDomain = async () => {
     const name = addValue.trim()
     if (!name) return
-    const id = Math.max(...domains.map((d) => d.id)) + 1
-    setDomains([{ id, domain_name: name, enabled: true, subdomain_count: 0, open_vulnerabilities: 0, risk: 'none', source_count: 2, last_scanned: 'scanning…' }, ...domains])
-    setAddOpen(false); setAddValue(''); setToast(`Added ${name} — scan started`)
+    try {
+      await createDomain(name)
+      setAddOpen(false); setAddValue(''); setToast(`Added ${name} — discovery started`)
+      load()
+    } catch (err) {
+      setToast(apiErrorMessage(err, 'Failed to add domain'))
+    }
+  }
+
+  const removeDomain = async (id: number) => {
+    try {
+      await deleteDomain(id)
+      setDomains((list) => list.filter((x) => x.id !== id))
+      setToast('Domain removed')
+    } catch (err) {
+      setToast(apiErrorMessage(err, 'Failed to remove domain'))
+    }
   }
 
   const head = (col: SortCol, label: string, align: 'left' | 'right' = 'left') => (
@@ -68,6 +96,8 @@ export function DomainsPage() {
         <Box sx={{ flex: 1 }} />
         <Button variant="contained" color="primary" startIcon={<AddOutlined />} onClick={() => setAddOpen(true)}>Add domain</Button>
       </Box>
+
+      {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
 
       <Card>
         <TableContainer>
@@ -99,13 +129,13 @@ export function DomainsPage() {
                   <TableCell><RiskChip risk={d.risk} /></TableCell>
                   <TableCell sx={{ fontSize: 13, color: 'text.secondary', whiteSpace: 'nowrap' }}>{d.last_scanned}</TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); setDomains(domains.filter((x) => x.id !== d.id)); setToast('Domain removed') }} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: theme.palette.error.main.replace('rgb(', 'rgba(').replace(')', ',0.12)') } }}>
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); removeDomain(d.id) }} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: theme.palette.error.main.replace('rgb(', 'rgba(').replace(')', ',0.12)') } }}>
                       <DeleteOutline sx={{ fontSize: 18 }} />
                     </IconButton>
                   </TableCell>
                 </TableRow>
               ))}
-              {rows.length === 0 && (
+              {rows.length === 0 && !loading && (
                 <TableRow><TableCell colSpan={6} align="center" sx={{ py: 6, color: 'text.disabled' }}>No domains match your search or filter.</TableCell></TableRow>
               )}
             </TableBody>

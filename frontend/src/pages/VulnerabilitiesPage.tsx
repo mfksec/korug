@@ -1,25 +1,40 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Box, Button, Card, Avatar, Typography, Table, TableBody, TableCell, TableHead,
   TableRow, TableContainer, TableSortLabel, Select, MenuItem, useTheme, Snackbar, Alert,
+  LinearProgress,
 } from '@mui/material'
 import FileDownloadOutlined from '@mui/icons-material/FileDownloadOutlined'
 import { FONT_MONO } from '@/styles/theme'
 import { SearchField, Segmented, ConfidenceBar, vulnTypeMeta } from '@/components/common/Widgets'
-import { mockVulnerabilities } from '@/data/mock'
+import { fetchVulnerabilities, setVulnerabilityFalsePositive } from '@/data/apiAdapters'
+import { apiErrorMessage } from '@/utils/apiError'
 import { Vulnerability, VulnType } from '@/types/domain'
 
 type SortCol = 'host' | 'vuln_type' | 'confidence_score'
 
 export function VulnerabilitiesPage() {
   const theme = useTheme()
-  const [vulns, setVulns] = useState<Vulnerability[]>(mockVulnerabilities)
+  const [vulns, setVulns] = useState<Vulnerability[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [type, setType] = useState<'all' | VulnType>('all')
   const [status, setStatus] = useState<'open' | 'false_positive' | 'all'>('open')
   const [sortBy, setSortBy] = useState<SortCol>('confidence_score')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
   const [toast, setToast] = useState('')
+
+  const load = useCallback(async () => {
+    try {
+      setVulns(await fetchVulnerabilities())
+    } catch (err) {
+      setToast(apiErrorMessage(err, 'Failed to load vulnerabilities'))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
 
   const rows = useMemo(() => {
     let list = vulns.filter((v) => v.host.toLowerCase().includes(search.toLowerCase()) || v.domain.toLowerCase().includes(search.toLowerCase()))
@@ -37,10 +52,17 @@ export function VulnerabilitiesPage() {
     else { setSortBy(col); setDir(col === 'confidence_score' ? 'desc' : 'asc') }
   }
 
-  const toggleFp = (v: Vulnerability) => {
+  const toggleFp = async (v: Vulnerability) => {
     const open = v.status === 'open'
-    setVulns(vulns.map((x) => (x.id === v.id ? { ...x, status: open ? 'false_positive' : 'open' } : x)))
-    setToast(open ? 'Marked as false positive' : 'Restored to open')
+    // optimistic flip, reconciled on error
+    setVulns((list) => list.map((x) => (x.id === v.id ? { ...x, status: open ? 'false_positive' : 'open' } : x)))
+    try {
+      await setVulnerabilityFalsePositive(v.id, open)
+      setToast(open ? 'Marked as false positive' : 'Restored to open')
+    } catch (err) {
+      setVulns((list) => list.map((x) => (x.id === v.id ? { ...x, status: v.status } : x)))
+      setToast(apiErrorMessage(err, 'Failed to update vulnerability'))
+    }
   }
 
   const head = (col: SortCol, label: string) => (
@@ -63,6 +85,8 @@ export function VulnerabilitiesPage() {
         <Box sx={{ flex: 1 }} />
         <Button variant="outlined" color="inherit" startIcon={<FileDownloadOutlined />} sx={{ borderColor: 'divider', color: 'text.secondary' }}>Export</Button>
       </Box>
+
+      {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
 
       <Card>
         <TableContainer>
@@ -102,7 +126,7 @@ export function VulnerabilitiesPage() {
                   </TableRow>
                 )
               })}
-              {rows.length === 0 && (
+              {rows.length === 0 && !loading && (
                 <TableRow><TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.disabled' }}>No vulnerabilities match your filters.</TableCell></TableRow>
               )}
             </TableBody>

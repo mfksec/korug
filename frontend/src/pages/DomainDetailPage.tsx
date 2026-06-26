@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Box, Button, Card, Grid, Avatar, Typography, Table, TableBody, TableCell,
-  TableHead, TableRow, TableContainer, useTheme, Tooltip,
+  TableHead, TableRow, TableContainer, useTheme, Tooltip, LinearProgress, Snackbar, Alert,
 } from '@mui/material'
 import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined'
 import PublicOutlined from '@mui/icons-material/PublicOutlined'
@@ -11,22 +11,62 @@ import RefreshOutlined from '@mui/icons-material/RefreshOutlined'
 import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
 import { FONT_MONO } from '@/styles/theme'
 import { SearchField, Segmented, RiskChip, TintChip, riskMeta, subStatusMeta } from '@/components/common/Widgets'
-import { mockDomains, mockSubdomains } from '@/data/mock'
+import { fetchDomainDetail, rescanDomain, type DomainDetail } from '@/data/apiAdapters'
+import { apiErrorMessage } from '@/utils/apiError'
 
 export function DomainDetailPage() {
   const theme = useTheme()
   const navigate = useNavigate()
   const { id } = useParams()
-  const domain = mockDomains.find((d) => d.id === Number(id)) || mockDomains[0]
+  const domainId = Number(id)
+  const [detail, setDetail] = useState<DomainDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState('')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'live' | 'issues'>('all')
 
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      setDetail(await fetchDomainDetail(domainId))
+    } catch (err) {
+      setToast(apiErrorMessage(err, 'Failed to load domain'))
+    } finally {
+      setLoading(false)
+    }
+  }, [domainId])
+
+  useEffect(() => { load() }, [load])
+
+  const domain = detail?.domain
   const subs = useMemo(() => {
-    let list = mockSubdomains(domain).filter((s) => s.host.toLowerCase().includes(search.toLowerCase()))
+    if (!detail) return []
+    let list = detail.subdomains.filter((s) => s.host.toLowerCase().includes(search.toLowerCase()))
     if (filter === 'live') list = list.filter((s) => s.status === 'live')
     else if (filter === 'issues') list = list.filter((s) => s.vuln_type)
     return list
-  }, [domain, search, filter])
+  }, [detail, search, filter])
+
+  const rescan = async () => {
+    try {
+      await rescanDomain(domainId)
+      setToast('Rescan started')
+    } catch (err) {
+      setToast(apiErrorMessage(err, 'Failed to start rescan'))
+    }
+  }
+
+  if (!domain) {
+    return (
+      <Box>
+        <Button startIcon={<ArrowBackOutlined />} onClick={() => navigate('/domains')} sx={{ color: 'text.secondary', mb: 2 }}>All domains</Button>
+        {loading ? <LinearProgress sx={{ borderRadius: 1 }} /> : <Typography sx={{ color: 'text.disabled' }}>Domain not found.</Typography>}
+        <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+          <Alert severity="error" variant="filled" onClose={() => setToast('')}>{toast}</Alert>
+        </Snackbar>
+      </Box>
+    )
+  }
 
   const stats = [
     { label: 'Subdomains', value: domain.subdomain_count, color: 'text.primary' as const },
@@ -52,7 +92,7 @@ export function DomainDetailPage() {
         </Box>
         <Box sx={{ display: 'flex', gap: 1.2 }}>
           <Button variant="outlined" color="inherit" startIcon={<FileDownloadOutlined />} sx={{ borderColor: 'divider', color: 'text.secondary' }}>Export XLSX</Button>
-          <Button variant="contained" color="primary" startIcon={<RefreshOutlined />}>Rescan</Button>
+          <Button variant="contained" color="primary" startIcon={<RefreshOutlined />} onClick={rescan}>Rescan</Button>
         </Box>
       </Box>
 
@@ -106,6 +146,10 @@ export function DomainDetailPage() {
           </Table>
         </TableContainer>
       </Card>
+
+      <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <Alert severity="info" variant="filled" onClose={() => setToast('')}>{toast}</Alert>
+      </Snackbar>
     </Box>
   )
 }

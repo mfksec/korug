@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import {
   Box, Card, Avatar, Typography, Table, TableBody, TableCell, TableHead, TableRow,
-  TableContainer, Chip, useTheme,
+  TableContainer, Chip, useTheme, LinearProgress,
 } from '@mui/material'
 import { FONT_MONO } from '@/styles/theme'
-import { mockAuditLogs } from '@/data/mock'
+import { fetchAuditLogs } from '@/data/apiAdapters'
+import type { AuditLog } from '@/types/domain'
 
 const actionColor: Record<string, 'secondary' | 'info' | 'success' | 'error' | 'warning' | 'default'> = {
   'auth.login': 'secondary', 'scan.started': 'info', 'scan.completed': 'success',
@@ -13,6 +15,13 @@ const actionColor: Record<string, 'secondary' | 'info' | 'success' | 'error' | '
 
 export function AuditLogsPage() {
   const theme = useTheme()
+  const [logs, setLogs] = useState<AuditLog[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchAuditLogs().then(setLogs).catch(() => setLogs([])).finally(() => setLoading(false))
+  }, [])
+
   const avatarColor = (actor: string) =>
     actor === 'admin' ? theme.palette.brand.text : actor === 'scanner' ? theme.palette.info.main : theme.palette.warning.main
 
@@ -28,7 +37,7 @@ export function AuditLogsPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {mockAuditLogs.map((l) => {
+            {logs.map((l) => {
               const c = actionColor[l.action] || 'default'
               const chipColor = c === 'default' ? theme.palette.text.secondary : c === 'secondary' ? theme.palette.brand.text : theme.palette[c].main
               return (
@@ -51,6 +60,10 @@ export function AuditLogsPage() {
           </TableBody>
         </Table>
       </TableContainer>
+      {loading && <LinearProgress />}
+      {!loading && logs.length === 0 && (
+        <Box sx={{ p: 4, textAlign: 'center', color: 'text.disabled' }}>No audit log entries.</Box>
+      )}
     </Card>
   )
 }
