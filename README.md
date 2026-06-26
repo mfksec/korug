@@ -34,18 +34,18 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 - Domains: searchable, sortable list with a per-domain risk roll-up; add or remove domains and drill into any one
 - Domain detail: discovered subdomains with DNS records, source attribution, live/orphan status, and on-demand rescan
 - Vulnerabilities: search, type/status filters, confidence scoring, and one-click false-positive flagging
-- Assets page: a searchable, filterable list of every detected subdomain across all domains, with IPs (grouped), HTTP/title/server, technologies, open ports, and Cloudflare
+- Settings: one tabbed page for your profile & password, discovery-source API keys, Slack notifications, and scan preferences
 - Live scan-status indicator in the sidebar while a discovery is running
 
 **Alerts & notifications**
 - In-app security alerts raised automatically from scan findings
-- Slack and Email (SMTP) integrations — configurable and testable directly from the UI
+- Slack notifications — configurable and testable from **Settings → Integrations**; email (SMTP) alerts via the API
 
 **Access control & administration**
 - JWT authentication with `admin` / `viewer` roles
-- User management: create users, change roles, enable/disable, reset passwords
-- Self-service profile and password changes
-- API keys for programmatic access
+- Self-service profile and password changes from **Settings → Profile**
+- User management (create users, change roles, enable/disable, reset passwords) via the REST API and CLI
+- Discovery-source API keys managed in **Settings → API keys**; programmatic access keys via the API
 - Persistent audit log of security-relevant actions
 
 **Automation & reporting**
@@ -68,7 +68,7 @@ Dashboard: http://localhost:3000 | API docs: http://localhost:8000/docs
 
 On first run an initial `admin` account is created. If `ADMIN_PASSWORD` is not set, a strong random password is generated and printed to the logs once — capture it and change it after logging in.
 
-> Configure secrets via environment variables, never in committed files. See [.env.example](.env.example) for all options. Slack and email notifications are configured at runtime from the dashboard's **Integrations** page.
+> Configure secrets via environment variables, never in committed files. See [.env.example](.env.example) for all options. Slack notifications are configured at runtime from the dashboard's **Settings → Integrations** tab.
 
 # Documentation
 
