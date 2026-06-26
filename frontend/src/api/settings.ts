@@ -26,6 +26,7 @@ export interface APIKey {
 export interface AuditLog {
   id: number
   user_id: number
+  user?: string | null
   action: string
   resource: string | null
   details: string | null
