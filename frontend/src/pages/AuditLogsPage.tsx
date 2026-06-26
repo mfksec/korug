@@ -1,259 +1,59 @@
-import React, { useState, useEffect } from 'react'
 import {
-  Container,
-  Box,
-  Card,
-  CardContent,
-  CardHeader,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  CircularProgress,
-  Alert,
-  Grid,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
+  Box, Card, Avatar, Typography, Table, TableBody, TableCell, TableHead, TableRow,
+  TableContainer, Chip, useTheme,
 } from '@mui/material'
-import { settingsAPI, type AuditLog, type AuditStats } from '@/api/settings'
-import { formatDate } from '@/utils/formatters'
+import { FONT_MONO } from '@/styles/theme'
+import { mockAuditLogs } from '@/data/mock'
 
-export const AuditLogsPage: React.FC = () => {
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
-  const [stats, setStats] = useState<AuditStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [filterAction, setFilterAction] = useState<string>('')
+const actionColor: Record<string, 'secondary' | 'info' | 'success' | 'error' | 'warning' | 'default'> = {
+  'auth.login': 'secondary', 'scan.started': 'info', 'scan.completed': 'success',
+  'domain.add': 'success', 'domain.delete': 'error', 'vuln.flag_fp': 'warning',
+  'settings.update': 'default', 'report.export': 'secondary',
+}
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const [logsData, statsData] = await Promise.all([
-          settingsAPI.listAuditLogs(100) as Promise<AuditLog[]>,
-          settingsAPI.getAuditStats() as Promise<AuditStats>,
-        ])
-        setAuditLogs(logsData)
-        setStats(statsData)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load audit logs')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [])
-
-  type ColorVariant = 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'
-  
-  const getActionColor = (action: string): ColorVariant => {
-    switch (action) {
-      case 'login':
-      case 'logout':
-        return 'info'
-      case 'create_domain':
-      case 'create_api_key':
-        return 'success'
-      case 'delete_domain':
-      case 'delete_api_key':
-        return 'error'
-      case 'run_scan':
-      case 'export_data':
-        return 'warning'
-      default:
-        return 'default'
-    }
-  }
-
-  const getStatusColor = (status: string): ColorVariant => {
-    return status === 'success' ? 'success' : 'error'
-  }
-
-  const filteredLogs = filterAction
-    ? auditLogs.filter(log => log.action === filterAction)
-    : auditLogs
-
-  // Get unique actions for filter
-  const uniqueActions = Array.from(new Set(auditLogs.map(log => log.action)))
-
-  if (loading) {
-    return (
-      <Box>
-        <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '500px' }}>
-          <CircularProgress />
-        </Container>
-      </Box>
-    )
-  }
+export function AuditLogsPage() {
+  const theme = useTheme()
+  const avatarColor = (actor: string) =>
+    actor === 'admin' ? theme.palette.brand.text : actor === 'scanner' ? theme.palette.info.main : theme.palette.warning.main
 
   return (
-    <Box>
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Typography variant="h4" sx={{ mb: 4, fontWeight: 'bold' }}>
-          Audit Logs
-        </Typography>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {/* Statistics Cards */}
-        {stats && (
-          <Grid container spacing={2} sx={{ mb: 4 }}>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Total Actions
-                  </Typography>
-                  <Typography variant="h5">{stats.total_actions}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Active API Keys
-                  </Typography>
-                  <Typography variant="h5">{stats.api_keys_active}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Last Login
-                  </Typography>
-                  <Typography variant="body2">
-                    {formatDate(stats.last_login)}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card>
-                <CardContent>
-                  <Typography color="textSecondary" gutterBottom>
-                    Unique Actions
-                  </Typography>
-                  <Typography variant="h5">{Object.keys(stats.by_action).length}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        )}
-
-        {/* Action Distribution */}
-        {stats && Object.keys(stats.by_action).length > 0 && (
-          <Card sx={{ mb: 4 }}>
-            <CardHeader title="Action Distribution" />
-            <CardContent>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {Object.entries(stats.by_action).map(([action, count]) => (
-                  <Chip
-                    key={action}
-                    label={`${action}: ${count}`}
-                    color={getActionColor(action)}
-                    variant="outlined"
-                  />
-                ))}
-              </Box>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Audit Logs Table */}
-        <Card>
-          <CardHeader
-            title="Activity Log"
-            subheader={`Showing ${filteredLogs.length} of ${auditLogs.length} entries`}
-          />
-          <CardContent>
-            <FormControl sx={{ mb: 2, minWidth: 200 }}>
-              <InputLabel>Filter by Action</InputLabel>
-              <Select
-                value={filterAction}
-                label="Filter by Action"
-                onChange={(e) => setFilterAction(e.target.value)}
-              >
-                <MenuItem value="">All Actions</MenuItem>
-                {uniqueActions.map(action => (
-                  <MenuItem key={action} value={action}>
-                    {action.replace(/_/g, ' ')}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <TableContainer>
-              <Table>
-                <TableHead sx={{ bgcolor: 'action.hover' }}>
-                  <TableRow>
-                    <TableCell>Timestamp</TableCell>
-                    <TableCell>Action</TableCell>
-                    <TableCell>Resource</TableCell>
-                    <TableCell>Details</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>IP Address</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredLogs.length > 0 ? (
-                    filteredLogs.map(log => (
-                      <TableRow key={log.id}>
-                        <TableCell sx={{ fontSize: '0.85rem' }}>
-                          {formatDate(log.timestamp)}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={log.action.replace(/_/g, ' ')}
-                            color={getActionColor(log.action)}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>{log.resource || '-'}</TableCell>
-                        <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {log.details || '-'}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={log.status}
-                            color={getStatusColor(log.status)}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell sx={{ fontSize: '0.85rem' }}>
-                          {log.ip_address || '-'}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
-                        <Typography color="textSecondary">
-                          No audit logs found
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </CardContent>
-        </Card>
-      </Container>
-    </Box>
+    <Card>
+      <TableContainer>
+        <Table sx={{ '& td, & th': { borderColor: 'divider' } }}>
+          <TableHead>
+            <TableRow sx={{ bgcolor: 'surface.subtle' }}>
+              {['Actor', 'Action', 'Target', 'Source IP', 'When'].map((h, i) => (
+                <TableCell key={h} align={i === 4 ? 'right' : 'left'} sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'text.disabled' }}>{h}</TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {mockAuditLogs.map((l) => {
+              const c = actionColor[l.action] || 'default'
+              const chipColor = c === 'default' ? theme.palette.text.secondary : c === 'secondary' ? theme.palette.brand.text : theme.palette[c].main
+              return (
+                <TableRow key={l.id} hover>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Avatar sx={{ width: 24, height: 24, fontSize: 10, fontWeight: 700, bgcolor: tint(avatarColor(l.actor), theme.palette.mode), color: avatarColor(l.actor) }}>{l.actor.slice(0, 2).toUpperCase()}</Avatar>
+                      <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{l.actor}</Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={l.action} size="small" sx={{ fontFamily: FONT_MONO, fontWeight: 500, fontSize: 12, bgcolor: tint(chipColor, theme.palette.mode), color: chipColor }} />
+                  </TableCell>
+                  <TableCell sx={{ fontFamily: FONT_MONO, fontSize: 12.5, color: 'text.secondary' }}>{l.target}</TableCell>
+                  <TableCell sx={{ fontFamily: FONT_MONO, fontSize: 12.5, color: 'text.disabled' }}>{l.source_ip}</TableCell>
+                  <TableCell align="right" sx={{ fontSize: 12.5, color: 'text.disabled' }}>{l.created_at}</TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Card>
   )
 }
+
+const tint = (color: string, mode: string) =>
+  mode === 'dark' ? color.replace('rgb(', 'rgba(').replace(')', ',0.16)') : color.replace('rgb(', 'rgba(').replace(')', ',0.12)')

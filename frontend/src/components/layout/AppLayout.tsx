@@ -1,105 +1,56 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { useState, MouseEvent } from 'react'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  AppBar, Avatar, Badge, Box, Divider, Drawer, IconButton, InputBase, List, ListItemButton,
-  ListItemIcon, ListItemText, Menu, MenuItem, Toolbar, Tooltip, Typography,
-  useMediaQuery, useTheme, ListSubheader, alpha,
+  Box, Drawer, AppBar, Toolbar, Typography, List, ListItemButton, ListItemIcon,
+  ListItemText, Chip, IconButton, Button, Avatar, Menu, MenuItem, Divider,
+  TextField, InputAdornment, LinearProgress, useTheme, Tooltip,
 } from '@mui/material'
-import MenuIcon from '@mui/icons-material/Menu'
-import DashboardIcon from '@mui/icons-material/SpaceDashboard'
-import LanIcon from '@mui/icons-material/Lan'
-import SecurityIcon from '@mui/icons-material/GppMaybe'
-import NotificationsIcon from '@mui/icons-material/NotificationsActive'
-import PeopleIcon from '@mui/icons-material/People'
-import ExtensionIcon from '@mui/icons-material/Extension'
-import SettingsIcon from '@mui/icons-material/Settings'
-import HistoryIcon from '@mui/icons-material/History'
-import LightModeIcon from '@mui/icons-material/LightMode'
-import DarkModeIcon from '@mui/icons-material/DarkMode'
-import LogoutIcon from '@mui/icons-material/Logout'
-import PersonIcon from '@mui/icons-material/Person'
-import SearchIcon from '@mui/icons-material/Search'
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
-import ChevronRightIcon from '@mui/icons-material/ChevronRight'
-import { useAuth } from '@/contexts/AuthContext'
-import { useColorMode } from '@/contexts/ColorModeContext'
-import { alertAPI } from '@/api/alerts'
+import SpaceDashboardOutlined from '@mui/icons-material/SpaceDashboardOutlined'
+import PublicOutlined from '@mui/icons-material/PublicOutlined'
+import GppMaybeOutlined from '@mui/icons-material/GppMaybeOutlined'
+import NotificationsNoneOutlined from '@mui/icons-material/NotificationsNoneOutlined'
+import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined'
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
+import ShieldOutlined from '@mui/icons-material/ShieldOutlined'
+import RadarOutlined from '@mui/icons-material/RadarOutlined'
+import SearchOutlined from '@mui/icons-material/SearchOutlined'
+import LightModeOutlined from '@mui/icons-material/LightModeOutlined'
+import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined'
+import KeyboardArrowDownOutlined from '@mui/icons-material/KeyboardArrowDownOutlined'
+import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
+import PersonOutline from '@mui/icons-material/PersonOutline'
+import { FONT_MONO, useColorMode } from '@/styles/theme'
+import { useAuth } from '@/hooks/useAuth'
 
-const DRAWER_WIDTH = 248
-const RAIL_WIDTH = 76
-const COLLAPSE_KEY = 'korug.sidebar.collapsed'
+const DRAWER_WIDTH = 236
 
-interface NavItem {
-  label: string
-  path: string
-  icon: React.ReactNode
-  adminOnly?: boolean
-  section: 'Monitoring' | 'Administration'
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, section: 'Monitoring' },
-  { label: 'Assets', path: '/assets', icon: <LanIcon />, section: 'Monitoring' },
-  { label: 'Vulnerabilities', path: '/vulnerabilities', icon: <SecurityIcon />, section: 'Monitoring' },
-  { label: 'Alerts', path: '/alerts', icon: <NotificationsIcon />, section: 'Monitoring' },
-  { label: 'Users', path: '/users', icon: <PeopleIcon />, adminOnly: true, section: 'Administration' },
-  { label: 'Integrations', path: '/integrations', icon: <ExtensionIcon />, section: 'Administration' },
-  { label: 'Settings', path: '/settings', icon: <SettingsIcon />, section: 'Administration' },
-  { label: 'Audit Logs', path: '/audit-logs', icon: <HistoryIcon />, section: 'Administration' },
+const NAV = [
+  { label: 'Dashboard', path: '/dashboard', icon: <SpaceDashboardOutlined /> },
+  { label: 'Domains', path: '/domains', icon: <PublicOutlined />, badge: 8 },
+  { label: 'Vulnerabilities', path: '/vulnerabilities', icon: <GppMaybeOutlined />, badge: 8, danger: true },
+  { label: 'Alerts', path: '/alerts', icon: <NotificationsNoneOutlined />, badge: 6 },
+  { label: 'Audit logs', path: '/audit-logs', icon: <ReceiptLongOutlined /> },
+  { label: 'Settings', path: '/settings', icon: <SettingsOutlined /> },
 ]
 
-export const AppLayout: React.FC = () => {
+const TITLES: Record<string, string> = {
+  '/dashboard': 'Dashboard', '/domains': 'Domains', '/vulnerabilities': 'Vulnerabilities',
+  '/alerts': 'Alerts', '/audit-logs': 'Audit logs', '/settings': 'Settings',
+}
+
+export function AppLayout() {
   const theme = useTheme()
-  const isDesktop = useMediaQuery(theme.breakpoints.up('md'))
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, isAdmin, logout } = useAuth()
   const { mode, toggle } = useColorMode()
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const { user, logout } = useAuth()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
-  const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem(COLLAPSE_KEY) === '1')
-  const [search, setSearch] = useState('')
-  const [activeAlerts, setActiveAlerts] = useState(0)
+  const sb = theme.palette.sidebar
 
-  // Mini (icon-only) rail applies on desktop when collapsed; mobile drawer is always full.
-  const mini = collapsed && isDesktop
-  const railWidth = collapsed ? RAIL_WIDTH : DRAWER_WIDTH
-
-  const visibleItems = NAV_ITEMS.filter((i) => !i.adminOnly || isAdmin)
-  const sections = Array.from(new Set(visibleItems.map((i) => i.section)))
-
-  const toggleCollapsed = () => {
-    setCollapsed((c) => {
-      localStorage.setItem(COLLAPSE_KEY, c ? '0' : '1')
-      return !c
-    })
-  }
-
-  const fetchAlertCount = useCallback(async () => {
-    try {
-      const stats = await alertAPI.getStats()
-      setActiveAlerts(stats.active)
-    } catch {
-      /* best-effort badge */
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchAlertCount()
-    const id = window.setInterval(fetchAlertCount, 30000)
-    return () => window.clearInterval(id)
-  }, [fetchAlertCount])
-
-  const go = (path: string) => {
-    navigate(path)
-    if (!isDesktop) setMobileOpen(false)
-  }
-
-  const submitSearch = () => {
-    const term = search.trim()
-    navigate(term ? `/assets?q=${encodeURIComponent(term)}` : '/assets')
-    if (!isDesktop) setMobileOpen(false)
-  }
+  const isActive = (path: string) =>
+    location.pathname === path || (path === '/domains' && location.pathname.startsWith('/domains/'))
+  const title = TITLES[location.pathname] ||
+    (location.pathname.startsWith('/domains/') ? 'Domain detail' : 'Körüg')
 
   const handleLogout = async () => {
     setAnchorEl(null)
@@ -107,171 +58,119 @@ export const AppLayout: React.FC = () => {
     navigate('/login')
   }
 
-  const initials = (user?.username || '?').slice(0, 2).toUpperCase()
-
-  const drawer = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Toolbar sx={{ px: mini ? 0 : 2.5, justifyContent: mini ? 'center' : 'flex-start' }}>
-        <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em', color: '#fff' }}>
-          {mini ? '𐰚' : '𐰚 Körüg'}
-        </Typography>
-      </Toolbar>
-      <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)' }} />
-      <Box sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden', py: 1 }}>
-        {sections.map((section) => (
-          <List
-            key={section}
-            subheader={
-              mini ? undefined : (
-                <ListSubheader disableSticky sx={{ bgcolor: 'transparent', color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                  {section}
-                </ListSubheader>
-              )
-            }
-          >
-            {visibleItems.filter((i) => i.section === section).map((item) => {
-              const selected = location.pathname === item.path
-              const button = (
-                <ListItemButton
-                  key={item.path}
-                  selected={selected}
-                  onClick={() => go(item.path)}
-                  sx={mini ? { justifyContent: 'center', mx: 1, px: 1.5 } : undefined}
-                >
-                  <ListItemIcon sx={{ minWidth: mini ? 0 : 38 }}>{item.icon}</ListItemIcon>
-                  {!mini && (
-                    <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: selected ? 700 : 500 }} />
-                  )}
-                </ListItemButton>
-              )
-              return mini ? (
-                <Tooltip key={item.path} title={item.label} placement="right">{button}</Tooltip>
-              ) : button
-            })}
-          </List>
-        ))}
-      </Box>
-      {/* Collapse toggle (desktop only) */}
-      <Box sx={{ display: { xs: 'none', md: 'block' }, p: 1 }}>
-        <Divider sx={{ borderColor: 'rgba(255,255,255,0.08)', mb: 1 }} />
-        <ListItemButton onClick={toggleCollapsed} sx={mini ? { justifyContent: 'center' } : undefined}>
-          <ListItemIcon sx={{ minWidth: mini ? 0 : 38 }}>
-            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
-          </ListItemIcon>
-          {!mini && <ListItemText primary="Collapse" primaryTypographyProps={{ fontWeight: 500 }} />}
-        </ListItemButton>
-      </Box>
-    </Box>
-  )
-
-  const contentOffset = { md: `${railWidth}px` }
-  const contentWidth = { md: `calc(100% - ${railWidth}px)` }
-
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="fixed" sx={{ width: contentWidth, ml: contentOffset, transition: 'width .2s ease, margin .2s ease' }}>
-        <Toolbar sx={{ gap: 1 }}>
-          <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1, display: { md: 'none' } }}>
-            <MenuIcon />
-          </IconButton>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>
-            {visibleItems.find((i) => i.path === location.pathname)?.label || 'Körüg'}
-          </Typography>
-
-          {/* Global search → Assets */}
-          <Box
-            sx={{
-              ml: { sm: 2 },
-              flexGrow: 1,
-              maxWidth: 460,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              px: 1.5,
-              height: 38,
-              borderRadius: 2,
-              bgcolor: (t) => alpha(t.palette.text.primary, t.palette.mode === 'dark' ? 0.06 : 0.04),
-              border: (t) => `1px solid ${t.palette.divider}`,
-            }}
-          >
-            <SearchIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-            <InputBase
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') submitSearch() }}
-              placeholder="Search subdomains…"
-              sx={{ flexGrow: 1, fontSize: 14, color: 'text.primary' }}
-            />
+      <Drawer
+        variant="permanent"
+        sx={{
+          width: DRAWER_WIDTH, flexShrink: 0,
+          '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', bgcolor: sb.bg, borderColor: sb.border, color: sb.text },
+        }}
+      >
+        {/* Brand */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.4, p: 2.2, borderBottom: 1, borderColor: sb.border }}>
+          <Box sx={{ width: 32, height: 32, borderRadius: 2, bgcolor: theme.palette.brand.main, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+            <ShieldOutlined sx={{ fontSize: 19 }} />
           </Box>
+          <Box>
+            <Typography sx={{ fontFamily: theme.typography.h6.fontFamily, fontWeight: 800, fontSize: 17, color: sb.textActive, lineHeight: 1 }}>Körüg</Typography>
+            <Typography sx={{ fontSize: 10, color: sb.text, letterSpacing: '.5px', textTransform: 'uppercase', mt: 0.3 }}>Acme Security</Typography>
+          </Box>
+        </Box>
 
-          <Box sx={{ flexGrow: { xs: 1, sm: 0 } }} />
+        <Typography sx={{ px: 2.7, pt: 2, pb: 1, fontSize: 10.5, fontWeight: 700, letterSpacing: '.8px', textTransform: 'uppercase', color: sb.text, opacity: 0.7 }}>Monitoring</Typography>
+        <List sx={{ px: 1.2, flex: 1 }}>
+          {NAV.map((item) => {
+            const active = isActive(item.path)
+            return (
+              <ListItemButton
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                sx={{
+                  borderRadius: 1.75, mb: 0.3, py: 1.1, color: active ? sb.textActive : sb.text,
+                  bgcolor: active ? sb.activeBg : 'transparent',
+                  boxShadow: active ? `inset 3px 0 0 ${theme.palette.brand.main}` : 'none',
+                  '&:hover': { bgcolor: sb.activeBg, color: sb.textActive },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 32, color: 'inherit', '& svg': { fontSize: 19 } }}>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13.5, fontWeight: active ? 700 : 500 }} />
+                {item.badge != null && (
+                  <Chip
+                    label={item.badge}
+                    size="small"
+                    sx={{
+                      height: 20, fontFamily: FONT_MONO, fontWeight: 700, fontSize: 11,
+                      bgcolor: item.danger ? theme.palette.error.main : 'rgba(255,255,255,.1)',
+                      color: item.danger ? '#fff' : sb.textActive,
+                    }}
+                  />
+                )}
+              </ListItemButton>
+            )
+          })}
+        </List>
 
-          <Tooltip title="Alerts">
-            <IconButton onClick={() => navigate('/alerts')} sx={{ color: 'text.secondary' }}>
-              <Badge badgeContent={activeAlerts} color="error" max={99}>
-                <NotificationsIcon />
-              </Badge>
-            </IconButton>
-          </Tooltip>
-
-          <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-            <IconButton onClick={toggle} sx={{ color: 'text.secondary' }}>
-              {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
-            </IconButton>
-          </Tooltip>
-
-          <Tooltip title="Account">
-            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ ml: 0.5 }}>
-              <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: 14, fontWeight: 700 }}>
-                {initials}
-              </Avatar>
-            </IconButton>
-          </Tooltip>
-          <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}
-                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}>
-            <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant="subtitle2">{user?.username}</Typography>
-              <Typography variant="caption" color="text.secondary">{user?.email}</Typography>
+        {/* Scan status */}
+        <Box sx={{ p: 1.5, borderTop: 1, borderColor: sb.border }}>
+          <Box sx={{ bgcolor: sb.bg2, border: 1, borderColor: sb.border, borderRadius: 2, p: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <RadarOutlined sx={{ fontSize: 15, color: theme.palette.brand.text, animation: 'spin 2.4s linear infinite', '@keyframes spin': { to: { transform: 'rotate(360deg)' } } }} />
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: sb.textActive }}>Scanning acme-corp.com</Typography>
             </Box>
-            <Divider />
-            <MenuItem onClick={() => { setAnchorEl(null); navigate('/profile') }}>
-              <ListItemIcon><PersonIcon fontSize="small" /></ListItemIcon> Profile
-            </MenuItem>
-            <MenuItem onClick={handleLogout}>
-              <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon> Logout
-            </MenuItem>
-          </Menu>
-        </Toolbar>
-      </AppBar>
+            <LinearProgress variant="determinate" value={72} sx={{ height: 5, borderRadius: 3, bgcolor: 'rgba(255,255,255,.1)', '& .MuiLinearProgress-bar': { bgcolor: theme.palette.brand.main } }} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.9, fontSize: 11, color: sb.text }}>
+              <span>112 / 156 hosts</span><span style={{ fontFamily: FONT_MONO }}>72%</span>
+            </Box>
+          </Box>
+        </Box>
+      </Drawer>
 
-      {/* Sidebar: permanent (collapsible) on desktop, temporary drawer on mobile */}
-      <Box component="nav" sx={{ width: { md: railWidth }, flexShrink: { md: 0 }, transition: 'width .2s ease' }}>
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          ModalProps={{ keepMounted: true }}
-          sx={{ display: { xs: 'block', md: 'none' }, '& .MuiDrawer-paper': { width: DRAWER_WIDTH } }}
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <AppBar
+          position="sticky"
+          elevation={0}
+          sx={{ bgcolor: 'background.paper', color: 'text.primary', borderBottom: 1, borderColor: 'divider', backdropFilter: 'blur(8px)' }}
         >
-          {drawer}
-        </Drawer>
-        <Drawer
-          variant="permanent"
-          open
-          sx={{
-            display: { xs: 'none', md: 'block' },
-            '& .MuiDrawer-paper': { width: railWidth, boxSizing: 'border-box', overflowX: 'hidden', transition: 'width .2s ease' },
-          }}
-        >
-          {drawer}
-        </Drawer>
-      </Box>
+          <Toolbar sx={{ gap: 2 }}>
+            <Typography variant="h6" sx={{ fontSize: 18, whiteSpace: 'nowrap' }}>{title}</Typography>
+            <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+              <TextField
+                size="small"
+                placeholder="Search domains, subdomains, hosts…"
+                sx={{ width: '100%', maxWidth: 440, '& .MuiOutlinedInput-root': { bgcolor: 'background.default' } }}
+                InputProps={{ startAdornment: <InputAdornment position="start"><SearchOutlined sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+              />
+            </Box>
+            <Button variant="contained" color="primary" startIcon={<RadarOutlined />}>Scan now</Button>
+            <Tooltip title="Toggle theme">
+              <IconButton onClick={toggle} sx={{ border: 1, borderColor: 'divider', borderRadius: 1.75 }}>
+                {mode === 'dark' ? <LightModeOutlined sx={{ fontSize: 19 }} /> : <DarkModeOutlined sx={{ fontSize: 19 }} />}
+              </IconButton>
+            </Tooltip>
+            <IconButton onClick={() => navigate('/alerts')} sx={{ border: 1, borderColor: 'divider', borderRadius: 1.75 }}>
+              <Box sx={{ position: 'relative' }}>
+                <NotificationsNoneOutlined sx={{ fontSize: 19 }} />
+                <Box sx={{ position: 'absolute', top: -1, right: -1, width: 7, height: 7, borderRadius: '50%', bgcolor: 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
+              </Box>
+            </IconButton>
+            <Button onClick={(e: MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget)} sx={{ borderRadius: 20, border: 1, borderColor: 'divider', pl: 0.5, pr: 1, py: 0.5, minWidth: 0 }}>
+              <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.brand.main, fontSize: 12, fontWeight: 700 }}>AD</Avatar>
+              <KeyboardArrowDownOutlined sx={{ fontSize: 16, color: 'text.disabled', ml: 0.5 }} />
+            </Button>
+            <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
+              <Box sx={{ px: 2, py: 1, minWidth: 200 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{user?.username || 'admin'}</Typography>
+                <Typography sx={{ fontSize: 12, color: 'text.disabled' }}>{user?.email || 'admin@acme.com'} · Administrator</Typography>
+              </Box>
+              <Divider />
+              <MenuItem onClick={() => { setAnchorEl(null); navigate('/settings') }}><PersonOutline sx={{ fontSize: 18, mr: 1.5 }} />Profile &amp; settings</MenuItem>
+              <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}><LogoutOutlined sx={{ fontSize: 18, mr: 1.5 }} />Sign out</MenuItem>
+            </Menu>
+          </Toolbar>
+        </AppBar>
 
-      {/* Main content */}
-      <Box component="main" sx={{ flexGrow: 1, width: contentWidth, minWidth: 0, transition: 'width .2s ease' }}>
-        <Toolbar />
-        <Box sx={{ p: { xs: 2, sm: 3 } }}>
+        <Box component="main" sx={{ p: 3.5, maxWidth: 1320, mx: 'auto' }}>
           <Outlet />
         </Box>
       </Box>
