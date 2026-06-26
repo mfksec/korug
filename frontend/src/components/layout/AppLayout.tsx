@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, MouseEvent, KeyboardEvent } from 'react'
+import { useCallback, useEffect, useState, MouseEvent } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Box, Drawer, AppBar, Toolbar, Typography, List, ListItemButton, ListItemIcon,
@@ -7,13 +7,10 @@ import {
 } from '@mui/material'
 import SpaceDashboardOutlined from '@mui/icons-material/SpaceDashboardOutlined'
 import PublicOutlined from '@mui/icons-material/PublicOutlined'
-import LanOutlined from '@mui/icons-material/LanOutlined'
 import GppMaybeOutlined from '@mui/icons-material/GppMaybeOutlined'
 import NotificationsNoneOutlined from '@mui/icons-material/NotificationsNoneOutlined'
 import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined'
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
-import PeopleOutline from '@mui/icons-material/PeopleOutline'
-import ExtensionOutlined from '@mui/icons-material/ExtensionOutlined'
 import ShieldOutlined from '@mui/icons-material/ShieldOutlined'
 import RadarOutlined from '@mui/icons-material/RadarOutlined'
 import SearchOutlined from '@mui/icons-material/SearchOutlined'
@@ -21,7 +18,6 @@ import LightModeOutlined from '@mui/icons-material/LightModeOutlined'
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined'
 import KeyboardArrowDownOutlined from '@mui/icons-material/KeyboardArrowDownOutlined'
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined'
-import PersonOutline from '@mui/icons-material/PersonOutline'
 import { FONT_MONO, useColorMode } from '@/styles/theme'
 import { useAuth } from '@/hooks/useAuth'
 import { alertAPI } from '@/api/alerts'
@@ -29,38 +25,27 @@ import { scanAPI } from '@/api/scans'
 
 const DRAWER_WIDTH = 236
 
-type Section = 'Monitoring' | 'Administration'
-interface NavItem { label: string; path: string; icon: JSX.Element; section: Section; adminOnly?: boolean }
-
-const NAV: NavItem[] = [
-  { label: 'Dashboard', path: '/dashboard', icon: <SpaceDashboardOutlined />, section: 'Monitoring' },
-  { label: 'Domains', path: '/domains', icon: <PublicOutlined />, section: 'Monitoring' },
-  { label: 'Assets', path: '/assets', icon: <LanOutlined />, section: 'Monitoring' },
-  { label: 'Vulnerabilities', path: '/vulnerabilities', icon: <GppMaybeOutlined />, section: 'Monitoring' },
-  { label: 'Alerts', path: '/alerts', icon: <NotificationsNoneOutlined />, section: 'Monitoring' },
-  { label: 'Users', path: '/users', icon: <PeopleOutline />, section: 'Administration', adminOnly: true },
-  { label: 'Integrations', path: '/integrations', icon: <ExtensionOutlined />, section: 'Administration' },
-  { label: 'Audit logs', path: '/audit-logs', icon: <ReceiptLongOutlined />, section: 'Administration' },
-  { label: 'Settings', path: '/settings', icon: <SettingsOutlined />, section: 'Administration' },
+const NAV = [
+  { label: 'Dashboard', path: '/dashboard', icon: <SpaceDashboardOutlined /> },
+  { label: 'Domains', path: '/domains', icon: <PublicOutlined /> },
+  { label: 'Vulnerabilities', path: '/vulnerabilities', icon: <GppMaybeOutlined /> },
+  { label: 'Alerts', path: '/alerts', icon: <NotificationsNoneOutlined /> },
+  { label: 'Audit logs', path: '/audit-logs', icon: <ReceiptLongOutlined /> },
+  { label: 'Settings', path: '/settings', icon: <SettingsOutlined /> },
 ]
 
 const TITLES: Record<string, string> = Object.fromEntries(NAV.map((n) => [n.path, n.label]))
-TITLES['/profile'] = 'Profile'
 
 export function AppLayout() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const { mode, toggle } = useColorMode()
-  const { user, isAdmin, logout } = useAuth()
+  const { user, logout } = useAuth()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
-  const [search, setSearch] = useState('')
   const [activeAlerts, setActiveAlerts] = useState(0)
-  const [activeScans, setActiveScans] = useState<string[]>([])
+  const [activeScans, setActiveScans] = useState(0)
   const sb = theme.palette.sidebar
-
-  const items = useMemo(() => NAV.filter((n) => !n.adminOnly || isAdmin), [isAdmin])
-  const sections = useMemo(() => Array.from(new Set(items.map((i) => i.section))) as Section[], [items])
 
   const isActive = (path: string) =>
     location.pathname === path || (path === '/domains' && location.pathname.startsWith('/domains/'))
@@ -68,13 +53,10 @@ export function AppLayout() {
     (location.pathname.startsWith('/domains/') ? 'Domain detail' : 'Körüg')
 
   const refreshAlerts = useCallback(async () => {
-    try { setActiveAlerts((await alertAPI.getStats()).active) } catch { /* best-effort badge */ }
+    try { setActiveAlerts((await alertAPI.getStats()).active) } catch { /* best-effort */ }
   }, [])
   const refreshScans = useCallback(async () => {
-    try {
-      const scans = await scanAPI.getActiveScans()
-      setActiveScans(scans.map((s) => String(s.domain_id)))
-    } catch { /* best-effort */ }
+    try { setActiveScans((await scanAPI.getActiveScans()).length) } catch { /* best-effort */ }
   }, [])
 
   useEffect(() => {
@@ -90,14 +72,7 @@ export function AppLayout() {
     navigate('/login')
   }
 
-  const submitSearch = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Enter') return
-    const q = search.trim()
-    navigate(q ? `/assets?q=${encodeURIComponent(q)}` : '/assets')
-  }
-
   const initials = (user?.username || '?').slice(0, 2).toUpperCase()
-  const scanning = activeScans.length
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -119,46 +94,40 @@ export function AppLayout() {
           </Box>
         </Box>
 
-        <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-          {sections.map((section) => (
-            <Box key={section}>
-              <Typography sx={{ px: 2.7, pt: 2, pb: 1, fontSize: 10.5, fontWeight: 700, letterSpacing: '.8px', textTransform: 'uppercase', color: sb.text, opacity: 0.7 }}>{section}</Typography>
-              <List sx={{ px: 1.2, py: 0 }}>
-                {items.filter((i) => i.section === section).map((item) => {
-                  const active = isActive(item.path)
-                  const badge = item.path === '/alerts' && activeAlerts > 0 ? activeAlerts : null
-                  return (
-                    <ListItemButton
-                      key={item.path}
-                      onClick={() => navigate(item.path)}
-                      sx={{
-                        borderRadius: 1.75, mb: 0.3, py: 1.1, color: active ? sb.textActive : sb.text,
-                        bgcolor: active ? sb.activeBg : 'transparent',
-                        boxShadow: active ? `inset 3px 0 0 ${theme.palette.brand.main}` : 'none',
-                        '&:hover': { bgcolor: sb.activeBg, color: sb.textActive },
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 32, color: 'inherit', '& svg': { fontSize: 19 } }}>{item.icon}</ListItemIcon>
-                      <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13.5, fontWeight: active ? 700 : 500 }} />
-                      {badge != null && (
-                        <Chip label={badge} size="small" sx={{ height: 20, fontFamily: FONT_MONO, fontWeight: 700, fontSize: 11, bgcolor: theme.palette.error.main, color: '#fff' }} />
-                      )}
-                    </ListItemButton>
-                  )
-                })}
-              </List>
-            </Box>
-          ))}
-        </Box>
+        <Typography sx={{ px: 2.7, pt: 2, pb: 1, fontSize: 10.5, fontWeight: 700, letterSpacing: '.8px', textTransform: 'uppercase', color: sb.text, opacity: 0.7 }}>Monitoring</Typography>
+        <List sx={{ px: 1.2, flex: 1 }}>
+          {NAV.map((item) => {
+            const active = isActive(item.path)
+            const badge = item.path === '/alerts' && activeAlerts > 0 ? activeAlerts : null
+            return (
+              <ListItemButton
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                sx={{
+                  borderRadius: 1.75, mb: 0.3, py: 1.1, color: active ? sb.textActive : sb.text,
+                  bgcolor: active ? sb.activeBg : 'transparent',
+                  boxShadow: active ? `inset 3px 0 0 ${theme.palette.brand.main}` : 'none',
+                  '&:hover': { bgcolor: sb.activeBg, color: sb.textActive },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 32, color: 'inherit', '& svg': { fontSize: 19 } }}>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13.5, fontWeight: active ? 700 : 500 }} />
+                {badge != null && (
+                  <Chip label={badge} size="small" sx={{ height: 20, fontFamily: FONT_MONO, fontWeight: 700, fontSize: 11, bgcolor: theme.palette.error.main, color: '#fff' }} />
+                )}
+              </ListItemButton>
+            )
+          })}
+        </List>
 
         {/* Live scan status (only while a discovery is running) */}
-        {scanning > 0 && (
+        {activeScans > 0 && (
           <Box sx={{ p: 1.5, borderTop: 1, borderColor: sb.border }}>
             <Box sx={{ bgcolor: sb.bg2, border: 1, borderColor: sb.border, borderRadius: 2, p: 1.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <RadarOutlined sx={{ fontSize: 15, color: theme.palette.brand.text, animation: 'spin 2.4s linear infinite', '@keyframes spin': { to: { transform: 'rotate(360deg)' } } }} />
                 <Typography sx={{ fontSize: 12, fontWeight: 700, color: sb.textActive }}>
-                  Scanning {scanning} domain{scanning > 1 ? 's' : ''}
+                  Scanning {activeScans} domain{activeScans > 1 ? 's' : ''}
                 </Typography>
               </Box>
               <LinearProgress sx={{ height: 5, borderRadius: 3, bgcolor: 'rgba(255,255,255,.1)', '& .MuiLinearProgress-bar': { bgcolor: theme.palette.brand.main } }} />
@@ -178,10 +147,7 @@ export function AppLayout() {
             <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
               <TextField
                 size="small"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={submitSearch}
-                placeholder="Search subdomains, hosts… (Enter)"
+                placeholder="Search domains, subdomains, hosts…"
                 sx={{ width: '100%', maxWidth: 440, '& .MuiOutlinedInput-root': { bgcolor: 'background.default' } }}
                 InputProps={{ startAdornment: <InputAdornment position="start"><SearchOutlined sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
               />
@@ -206,10 +172,9 @@ export function AppLayout() {
             <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
               <Box sx={{ px: 2, py: 1, minWidth: 200 }}>
                 <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{user?.username}</Typography>
-                <Typography sx={{ fontSize: 12, color: 'text.disabled' }}>{user?.email}{isAdmin ? ' · Administrator' : ''}</Typography>
+                <Typography sx={{ fontSize: 12, color: 'text.disabled' }}>{user?.email}</Typography>
               </Box>
               <Divider />
-              <MenuItem onClick={() => { setAnchorEl(null); navigate('/profile') }}><PersonOutline sx={{ fontSize: 18, mr: 1.5 }} />Profile</MenuItem>
               <MenuItem onClick={() => { setAnchorEl(null); navigate('/settings') }}><SettingsOutlined sx={{ fontSize: 18, mr: 1.5 }} />Settings</MenuItem>
               <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}><LogoutOutlined sx={{ fontSize: 18, mr: 1.5 }} />Sign out</MenuItem>
             </Menu>
