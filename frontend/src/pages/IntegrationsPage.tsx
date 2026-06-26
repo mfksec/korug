@@ -78,6 +78,7 @@ export const IntegrationsPage: React.FC = () => {
     }
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [])
 
   const flash = (msg: string) => { setSuccess(msg); setTimeout(() => setSuccess(null), 4000) }

@@ -1,143 +1,149 @@
-import { createTheme, Theme, ThemeProvider } from '@mui/material/styles'
-import CssBaseline from '@mui/material/CssBaseline'
-import { PaletteMode } from '@mui/material'
-
-const FONT_STACK = [
-  'Inter',
-  '-apple-system',
-  'BlinkMacSystemFont',
-  '"Segoe UI"',
-  'Roboto',
-  '"Helvetica Neue"',
-  'Arial',
-  'sans-serif',
-].join(',')
+import { createContext, useContext } from 'react'
+import { createTheme, Theme, alpha } from '@mui/material/styles'
 
 /**
- * Brand palette — turquoise + deep petrol, the single source of truth for
- * brand colour. Adjust a value here and it propagates across the whole UI.
+ * Körüg theme — a clean, security-tool design language with a darker feel.
+ * Supports light & dark modes. The left navigation rail stays dark in both
+ * modes (a deep teal in light, near-black slate in dark) as a brand signature.
  */
-export const BRAND = {
-  turquoise: '#0BA5A5',      // primary
-  turquoiseLight: '#3FC0C0',
-  turquoiseDark: '#078A8A',
-  petrol: '#0E2F33',         // dark sidebar / accent surface (used in both modes)
-  petrolDark: '#0A2125',
-  ink: '#14252A',            // near-black text with a teal undertone
-  // semantic (severity) colours
-  success: '#16A34A',
-  warning: '#F4B740',
-  error: '#E5484D',
-  info: '#0EA5E9',
-} as const
 
-/** Sidebar surface colour for the current mode (deep petrol, dark in both). */
-export const sidebarBg = (isDark: boolean): string => (isDark ? BRAND.petrolDark : BRAND.petrol)
+export type AppMode = 'light' | 'dark'
 
-/**
- * Build the application theme for the given color mode.
- * Light and dark share the same brand hues; surfaces and text invert.
- */
-export const createAppTheme = (mode: PaletteMode): Theme => {
-  const isDark = mode === 'dark'
+// ---- Custom palette extensions (module augmentation) ----
+declare module '@mui/material/styles' {
+  interface Palette {
+    brand: { main: string; text: string; subtle: string }
+    sidebar: { bg: string; bg2: string; text: string; textActive: string; activeBg: string; border: string }
+    surface: { subtle: string; raised: string }
+  }
+  interface PaletteOptions {
+    brand?: { main: string; text: string; subtle: string }
+    sidebar?: { bg: string; bg2: string; text: string; textActive: string; activeBg: string; border: string }
+    surface?: { subtle: string; raised: string }
+  }
+}
 
+const FONT_BODY = '"Lato", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+const FONT_DISPLAY = '"Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+export const FONT_MONO = '"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+
+const light = {
+  bg: 'rgb(245,247,249)',
+  paper: '#ffffff',
+  surfaceSubtle: 'rgb(238,242,245)',
+  surfaceRaised: 'rgb(245,247,249)',
+  border: 'rgb(224,230,235)',
+  textPrimary: 'rgb(26,28,28)',
+  textSecondary: 'rgb(64,81,94)',
+  textTertiary: 'rgb(96,117,133)',
+  brand: 'rgb(10,166,184)',
+  brandText: 'rgb(6,124,137)',
+  brandSubtle: 'rgb(231,246,248)',
+  green: 'rgb(15,169,128)',
+  greenDark: 'rgb(11,131,99)',
+  blue: 'rgb(31,108,224)',
+  orange: 'rgb(223,148,17)',
+  red: 'rgb(237,85,84)',
+  purple: 'rgb(114,84,211)',
+  sidebarBg: 'rgb(5,79,87)',
+  sidebarBg2: 'rgb(6,70,77)',
+  sidebarText: 'rgb(160,206,212)',
+  sidebarActive: alpha('#ffffff', 0.16),
+  sidebarBorder: alpha('#ffffff', 0.09),
+}
+
+const dark = {
+  bg: '#0b1116',
+  paper: '#121b22',
+  surfaceSubtle: '#18242c',
+  surfaceRaised: '#1d2a33',
+  border: '#243038',
+  textPrimary: '#eaf1f5',
+  textSecondary: '#a4b4c0',
+  textTertiary: '#71828f',
+  brand: 'rgb(10,166,184)',
+  brandText: '#3fcfdb',
+  brandSubtle: alpha('rgb(10,166,184)', 0.15),
+  green: 'rgb(20,180,138)',
+  greenDark: 'rgb(16,152,116)',
+  blue: 'rgb(76,144,242)',
+  orange: 'rgb(246,188,86)',
+  red: 'rgb(237,85,84)',
+  purple: 'rgb(138,97,241)',
+  sidebarBg: '#070c10',
+  sidebarBg2: '#0c131a',
+  sidebarText: '#8395a1',
+  sidebarActive: alpha('rgb(10,166,184)', 0.16),
+  sidebarBorder: '#161f27',
+}
+
+export function createAppTheme(mode: AppMode): Theme {
+  const t = mode === 'dark' ? dark : light
   return createTheme({
     palette: {
       mode,
-      primary: { main: BRAND.turquoise, light: BRAND.turquoiseLight, dark: BRAND.turquoiseDark, contrastText: '#fff' },
-      secondary: { main: BRAND.petrol, light: '#1F4A50', dark: BRAND.petrolDark, contrastText: '#fff' },
-      success: { main: BRAND.success },
-      warning: { main: BRAND.warning },
-      error: { main: BRAND.error },
-      info: { main: BRAND.info },
-      background: {
-        default: isDark ? '#0B1416' : '#F4F7F8',
-        paper: isDark ? '#12201F' : '#ffffff',
-      },
-      divider: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(14,47,51,0.10)',
-      text: {
-        primary: isDark ? '#E6EEF0' : BRAND.ink,
-        secondary: isDark ? '#8FA3A6' : '#5A6B70',
+      primary: { main: t.green, dark: t.greenDark, contrastText: '#ffffff' },
+      secondary: { main: t.brand },
+      error: { main: t.red },
+      warning: { main: t.orange },
+      info: { main: t.blue },
+      success: { main: t.green },
+      background: { default: t.bg, paper: t.paper },
+      text: { primary: t.textPrimary, secondary: t.textSecondary, disabled: t.textTertiary },
+      divider: t.border,
+      brand: { main: t.brand, text: t.brandText, subtle: t.brandSubtle },
+      surface: { subtle: t.surfaceSubtle, raised: t.surfaceRaised },
+      sidebar: {
+        bg: t.sidebarBg, bg2: t.sidebarBg2, text: t.sidebarText,
+        textActive: '#ffffff', activeBg: t.sidebarActive, border: t.sidebarBorder,
       },
     },
-    shape: { borderRadius: 12 },
     typography: {
-      fontFamily: FONT_STACK,
-      h4: { fontWeight: 700, letterSpacing: '-0.02em' },
-      h5: { fontWeight: 700, letterSpacing: '-0.01em' },
-      h6: { fontWeight: 600 },
-      subtitle2: { fontWeight: 600 },
-      button: { fontWeight: 600 },
+      fontFamily: FONT_BODY,
+      h1: { fontFamily: FONT_DISPLAY, fontWeight: 800, letterSpacing: '-0.5px' },
+      h2: { fontFamily: FONT_DISPLAY, fontWeight: 800, letterSpacing: '-0.3px' },
+      h3: { fontFamily: FONT_DISPLAY, fontWeight: 700, letterSpacing: '-0.2px' },
+      h4: { fontFamily: FONT_DISPLAY, fontWeight: 700 },
+      h5: { fontFamily: FONT_DISPLAY, fontWeight: 700 },
+      h6: { fontFamily: FONT_DISPLAY, fontWeight: 700 },
+      button: { textTransform: 'none', fontWeight: 700 },
     },
+    shape: { borderRadius: 8 },
     components: {
       MuiButton: {
         defaultProps: { disableElevation: true },
-        styleOverrides: { root: { textTransform: 'none', borderRadius: 10 } },
+        styleOverrides: { root: { borderRadius: 7 } },
       },
       MuiPaper: {
-        styleOverrides: { root: { backgroundImage: 'none' } },
+        styleOverrides: {
+          root: { backgroundImage: 'none' },
+          outlined: { borderColor: t.border },
+        },
       },
       MuiCard: {
+        defaultProps: { variant: 'outlined' },
+        styleOverrides: { root: { borderRadius: 10, borderColor: t.border } },
+      },
+      MuiChip: { styleOverrides: { root: { borderRadius: 5, fontWeight: 700 } } },
+      MuiTableCell: {
+        styleOverrides: { root: { borderColor: t.border } },
+        defaultProps: {},
+      },
+      MuiOutlinedInput: {
         styleOverrides: {
-          root: {
-            borderRadius: 16,
-            border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)'}`,
-            boxShadow: isDark
-              ? '0 1px 2px rgba(0,0,0,0.4)'
-              : '0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)',
-          },
+          notchedOutline: { borderColor: t.border },
+          root: { borderRadius: 7 },
         },
       },
-      MuiAppBar: {
-        defaultProps: { elevation: 0, color: 'default' },
-        styleOverrides: {
-          root: {
-            backgroundColor: isDark ? 'rgba(23,26,33,0.8)' : 'rgba(255,255,255,0.8)',
-            backdropFilter: 'blur(8px)',
-            borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)'}`,
-          },
-        },
-      },
-      MuiDrawer: {
-        styleOverrides: {
-          paper: {
-            border: 'none',
-            // Deep petrol sidebar in both modes — the brand's signature surface.
-            backgroundColor: sidebarBg(isDark),
-            color: 'rgba(255,255,255,0.82)',
-            borderRight: 'none',
-          },
-        },
-      },
-      MuiListItemButton: {
-        styleOverrides: {
-          root: {
-            borderRadius: 10,
-            marginInline: 8,
-            color: 'rgba(255,255,255,0.78)',
-            '& .MuiListItemIcon-root': { color: 'rgba(255,255,255,0.6)' },
-            '&:hover': { backgroundColor: 'rgba(255,255,255,0.06)' },
-            '&.Mui-selected': {
-              backgroundColor: 'rgba(11,165,165,0.22)',
-              color: '#fff',
-              '& .MuiListItemIcon-root': { color: BRAND.turquoiseLight },
-              '&:hover': { backgroundColor: 'rgba(11,165,165,0.30)' },
-            },
-          },
-        },
-      },
-      MuiTableHead: {
-        styleOverrides: {
-          root: { '& .MuiTableCell-head': { fontWeight: 700 } },
-        },
-      },
-      MuiChip: { styleOverrides: { root: { fontWeight: 600 } } },
-      MuiTextField: { defaultProps: { size: 'small' } },
     },
   })
 }
 
-// Backwards-compatible default theme (light).
-const theme = createAppTheme('light')
+// ---- Color mode context ----
+interface ColorModeCtx { mode: AppMode; toggle: () => void; set: (m: AppMode) => void }
+export const ColorModeContext = createContext<ColorModeCtx>({
+  mode: 'dark', toggle: () => {}, set: () => {},
+})
+export const useColorMode = () => useContext(ColorModeContext)
 
-export { theme, ThemeProvider, CssBaseline }
+export const MODE_STORAGE_KEY = 'korug.theme'

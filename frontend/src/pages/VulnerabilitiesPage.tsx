@@ -1,456 +1,121 @@
-import React, { useState, useEffect } from 'react'
-import { Container, Box, Grid, Tabs, Tab, Typography, CircularProgress, Alert, Button, Menu, MenuItem,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Stack, Paper, Link } from '@mui/material'
-import { alpha, useTheme } from '@mui/material/styles'
-import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { vulnerabilityAPI } from '@/api/vulnerabilities'
-import { Vulnerability } from '@/types'
-import { StatsCard } from '@/components/dashboard/StatsCard'
-import FileDownloadIcon from '@mui/icons-material/FileDownload'
+import { useMemo, useState } from 'react'
+import {
+  Box, Button, Card, Avatar, Typography, Table, TableBody, TableCell, TableHead,
+  TableRow, TableContainer, TableSortLabel, Select, MenuItem, useTheme, Snackbar, Alert,
+} from '@mui/material'
+import FileDownloadOutlined from '@mui/icons-material/FileDownloadOutlined'
+import { FONT_MONO } from '@/styles/theme'
+import { SearchField, Segmented, ConfidenceBar, vulnTypeMeta } from '@/components/common/Widgets'
+import { mockVulnerabilities } from '@/data/mock'
+import { Vulnerability, VulnType } from '@/types/domain'
 
-/** Parse a vulnerability into a categorized, display-friendly finding. */
-const SEVERITY_COLOR: Record<string, 'error' | 'warning' | 'info' | 'default'> = {
-  CRITICAL: 'error', HIGH: 'error', MEDIUM: 'warning', LOW: 'info', UNKNOWN: 'default',
-}
-function parseFinding(v: Vulnerability) {
-  let d: Record<string, unknown> = {}
-  try { d = v.details ? JSON.parse(v.details) : {} } catch { /* details may be plain text */ }
-  const isCve = v.vuln_type.startsWith('cve:')
-  const severity = String(d.severity || (v.confidence_score >= 90 ? 'CRITICAL' : v.confidence_score >= 70 ? 'HIGH' : v.confidence_score >= 50 ? 'MEDIUM' : 'LOW')).toUpperCase()
-  return {
-    v,
-    category: isCve ? 'CVE' : 'Takeover',
-    label: isCve ? (d.cve_id as string) || v.vuln_type.slice(4) : v.vuln_type.replace(/_/g, ' '),
-    severity,
-    summary: (d.summary as string) || (d.message as string) || (typeof v.details === 'string' && v.details && v.details[0] !== '{' ? v.details : ''),
-    product: d.product ? `${d.product} ${d.version || ''}`.trim() : '',
-    cveId: isCve ? (d.cve_id as string) : '',
-  }
-}
+type SortCol = 'host' | 'vuln_type' | 'confidence_score'
 
-interface TimelineData {
-  date: string
-  count: number
-}
-
-interface TypeData {
-  name: string
-  value: number
-  color: string
-}
-
-interface ConfidenceData {
-  severity: string
-  score_range: string
-  count: number
-  percentage: number
-}
-
-interface VulnStats {
-  total: number
-  critical: number
-  high: number
-  medium: number
-  low: number
-  avg_confidence: number
-  by_type: Record<string, number>
-}
-
-// Color mapping for vulnerability types
-const TYPE_COLORS: Record<string, string> = {
-  'XSS': '#FF6B6B',
-  'SQLi': '#4ECDC4',
-  'CSRF': '#95E1D3',
-  'RCE': '#F38181',
-  'Other': '#AA96DA',
-}
-
-const SEVERITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']
-
-const FindingsPanel: React.FC<{ findings: Vulnerability[]; severityFilter: string }> = ({ findings, severityFilter }) => {
-  const parsed = findings
-    .map(parseFinding)
-    .filter((f) => severityFilter === 'ALL' || f.severity === severityFilter)
-  const groups = ['Takeover', 'CVE'].map((cat) => ({
-    cat,
-    items: parsed
-      .filter((f) => f.category === cat)
-      .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity)),
-  })).filter((g) => g.items.length > 0)
-
-  if (parsed.length === 0) {
-    return (
-      <Box sx={{ py: 6, textAlign: 'center' }}>
-        <Typography color="text.secondary">
-          {severityFilter === 'ALL'
-            ? 'No findings yet. Scan a subdomain from the Assets page to check it for takeover risks and CVEs.'
-            : `No ${severityFilter.toLowerCase()}-severity findings.`}
-        </Typography>
-      </Box>
-    )
-  }
-
-  return (
-    <Stack spacing={3}>
-      {groups.map((g) => (
-        <Paper key={g.cat} variant="outlined" sx={{ borderRadius: 2 }}>
-          <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="h6">{g.cat === 'CVE' ? 'CVEs' : 'Subdomain Takeover'}</Typography>
-            <Chip size="small" label={g.items.length} />
-          </Box>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Severity</TableCell>
-                  <TableCell>{g.cat === 'CVE' ? 'CVE' : 'Type'}</TableCell>
-                  {g.cat === 'CVE' && <TableCell>Component</TableCell>}
-                  <TableCell>Details</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {g.items.map((f) => (
-                  <TableRow key={f.v.id} hover sx={{ opacity: f.v.is_false_positive ? 0.5 : 1 }}>
-                    <TableCell>
-                      <Chip size="small" label={f.severity} color={SEVERITY_COLOR[f.severity] || 'default'} />
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {f.cveId
-                        ? <Link href={`https://nvd.nist.gov/vuln/detail/${f.cveId}`} target="_blank" rel="noopener noreferrer" underline="hover">{f.label}</Link>
-                        : f.label}
-                    </TableCell>
-                    {g.cat === 'CVE' && <TableCell sx={{ fontSize: '0.82rem' }}>{f.product || '—'}</TableCell>}
-                    <TableCell sx={{ fontSize: '0.82rem', color: 'text.secondary', maxWidth: 520 }}>{f.summary || '—'}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      ))}
-    </Stack>
-  )
-}
-
-export const VulnerabilitiesPage: React.FC = () => {
+export function VulnerabilitiesPage() {
   const theme = useTheme()
-  // Theme-aware tokens for recharts (which otherwise hardcodes light-mode grays)
-  const axisColor = theme.palette.text.secondary
-  const gridColor = theme.palette.divider
-  const chartColor = theme.palette.primary.main
-  const axisTick = { fill: axisColor, fontSize: 12 }
-  const tooltipStyle = {
-    backgroundColor: theme.palette.background.paper,
-    border: `1px solid ${theme.palette.divider}`,
-    borderRadius: 8,
-    color: theme.palette.text.primary,
-  }
-  const legendStyle = { color: axisColor }
+  const [vulns, setVulns] = useState<Vulnerability[]>(mockVulnerabilities)
+  const [search, setSearch] = useState('')
+  const [type, setType] = useState<'all' | VulnType>('all')
+  const [status, setStatus] = useState<'open' | 'false_positive' | 'all'>('open')
+  const [sortBy, setSortBy] = useState<SortCol>('confidence_score')
+  const [dir, setDir] = useState<'asc' | 'desc'>('desc')
+  const [toast, setToast] = useState('')
 
-  const [tabValue, setTabValue] = useState(0)
-  const [severityFilter, setSeverityFilter] = useState('ALL')
-  const [trendData, setTrendData] = useState<TimelineData[]>([])
-  const [typeData, setTypeData] = useState<TypeData[]>([])
-  const [confidenceData, setConfidenceData] = useState<ConfidenceData[]>([])
-  const [stats, setStats] = useState<VulnStats | null>(null)
-  const [findings, setFindings] = useState<Vulnerability[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [exportAnchor, setExportAnchor] = useState<null | HTMLElement>(null)
+  const rows = useMemo(() => {
+    let list = vulns.filter((v) => v.host.toLowerCase().includes(search.toLowerCase()) || v.domain.toLowerCase().includes(search.toLowerCase()))
+    if (type !== 'all') list = list.filter((v) => v.vuln_type === type)
+    if (status !== 'all') list = list.filter((v) => v.status === status)
+    const sign = dir === 'asc' ? 1 : -1
+    return [...list].sort((a, b) => {
+      if (sortBy === 'confidence_score') return (a.confidence_score - b.confidence_score) * sign
+      return String(a[sortBy]).localeCompare(String(b[sortBy])) * sign
+    })
+  }, [vulns, search, type, status, sortBy, dir])
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-
-        // Fetch all data in parallel
-        const [trendResponse, statsResponse, confidenceResponse, findingsResponse] = await Promise.all([
-          vulnerabilityAPI.getTimeline(30),
-          vulnerabilityAPI.getStats(),
-          vulnerabilityAPI.getConfidenceDistribution(),
-          vulnerabilityAPI.list({ limit: 1000 }),
-        ])
-
-        setTrendData(trendResponse)
-        setStats(statsResponse)
-        setConfidenceData(confidenceResponse)
-        setFindings(findingsResponse)
-
-        // Transform by_type data for pie chart
-        const typeChartData: TypeData[] = Object.entries(statsResponse.by_type).map(([name, value]) => ({
-          name,
-          value,
-          color: TYPE_COLORS[name] || '#999999',
-        }))
-        setTypeData(typeChartData)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch vulnerability data')
-        console.error('Error fetching vulnerability data:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [])
-
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue)
+  const sort = (col: SortCol) => {
+    if (sortBy === col) setDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortBy(col); setDir(col === 'confidence_score' ? 'desc' : 'asc') }
   }
 
-  const exportAsJSON = () => {
-    const data = {
-      stats,
-      timeline: trendData,
-      byType: typeData,
-      confidenceDistribution: confidenceData,
-      exportedAt: new Date().toISOString(),
-    }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `vulnerabilities_${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    setExportAnchor(null)
+  const toggleFp = (v: Vulnerability) => {
+    const open = v.status === 'open'
+    setVulns(vulns.map((x) => (x.id === v.id ? { ...x, status: open ? 'false_positive' : 'open' } : x)))
+    setToast(open ? 'Marked as false positive' : 'Restored to open')
   }
 
-  const exportAsCSV = () => {
-    const csv = [
-      ['Vulnerability Statistics'],
-      ['Metric', 'Value'],
-      ['Total Vulnerabilities', stats?.total || 0],
-      ['Critical', stats?.critical || 0],
-      ['High', stats?.high || 0],
-      ['Medium', stats?.medium || 0],
-      ['Low', stats?.low || 0],
-      ['Average Confidence', stats?.avg_confidence.toFixed(2) || 0],
-      [],
-      ['Vulnerabilities by Type'],
-      ['Type', 'Count'],
-      ...(typeData?.map(t => [t.name, t.value]) || []),
-    ]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
-      .join('\n')
-    
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `vulnerabilities_${new Date().toISOString().split('T')[0]}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    setExportAnchor(null)
-  }
-
-  if (loading) {
-    return (
-      <Box>
-        <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '500px' }}>
-          <CircularProgress />
-        </Container>
-      </Box>
-    )
-  }
-
-  // Severity breakdown derived from the findings actually shown (matches the table).
-  const parsedAll = findings.map(parseFinding)
-  const sevCount = (sev: string) => (sev === 'ALL' ? parsedAll.length : parsedAll.filter((f) => f.severity === sev).length)
-  const SEVERITY_CARDS = [
-    { key: 'ALL', label: 'All Findings', accent: theme.palette.primary.main },
-    { key: 'CRITICAL', label: 'Critical', accent: theme.palette.error.main },
-    { key: 'HIGH', label: 'High', accent: theme.palette.error.light },
-    { key: 'MEDIUM', label: 'Medium', accent: theme.palette.warning.main },
-    { key: 'LOW', label: 'Low', accent: theme.palette.info.main },
-  ]
+  const head = (col: SortCol, label: string) => (
+    <TableCell sortDirection={sortBy === col ? dir : false} sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'text.disabled' }}>
+      <TableSortLabel active={sortBy === col} direction={sortBy === col ? dir : 'asc'} onClick={() => sort(col)}>{label}</TableSortLabel>
+    </TableCell>
+  )
 
   return (
     <Box>
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-            Vulnerability Analytics
-          </Typography>
-          <Button
-            variant="outlined"
-            startIcon={<FileDownloadIcon />}
-            onClick={(e) => setExportAnchor(e.currentTarget)}
-          >
-            Export
-          </Button>
-          <Menu
-            anchorEl={exportAnchor}
-            open={Boolean(exportAnchor)}
-            onClose={() => setExportAnchor(null)}
-          >
-            <MenuItem onClick={exportAsJSON}>Export as JSON</MenuItem>
-            <MenuItem onClick={exportAsCSV}>Export as CSV</MenuItem>
-          </Menu>
-        </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.2, flexWrap: 'wrap' }}>
+        <SearchField value={search} onChange={setSearch} placeholder="Search hosts…" sx={{ flex: 1, minWidth: 220, maxWidth: 340 }} />
+        <Select size="small" value={type} onChange={(e) => setType(e.target.value as 'all' | VulnType)} sx={{ fontWeight: 700, fontSize: 13, bgcolor: 'background.paper' }}>
+          <MenuItem value="all">All types</MenuItem>
+          <MenuItem value="s3_bucket_takeover">S3 bucket takeover</MenuItem>
+          <MenuItem value="cname_orphan">CNAME orphan</MenuItem>
+          <MenuItem value="dns_orphan">DNS orphan</MenuItem>
+        </Select>
+        <Segmented value={status} onChange={setStatus} options={[{ value: 'open', label: 'Open' }, { value: 'false_positive', label: 'False positive' }, { value: 'all', label: 'All' }]} />
+        <Box sx={{ flex: 1 }} />
+        <Button variant="outlined" color="inherit" startIcon={<FileDownloadOutlined />} sx={{ borderColor: 'divider', color: 'text.secondary' }}>Export</Button>
+      </Box>
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
+      <Card>
+        <TableContainer>
+          <Table sx={{ '& td, & th': { borderColor: 'divider' } }}>
+            <TableHead>
+              <TableRow sx={{ bgcolor: 'surface.subtle' }}>
+                {head('host', 'Affected host')}
+                {head('vuln_type', 'Type')}
+                {head('confidence_score', 'Confidence')}
+                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'text.disabled' }}>Found</TableCell>
+                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'text.disabled' }}>Action</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.map((v) => {
+                const m = vulnTypeMeta(v.vuln_type)
+                const open = v.status === 'open'
+                return (
+                  <TableRow key={v.id} hover sx={{ opacity: open ? 1 : 0.55 }}>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.4 }}>
+                        <Avatar variant="rounded" sx={{ width: 32, height: 32, bgcolor: tint(theme.palette[m.color].main, theme.palette.mode), color: theme.palette[m.color].main }}><m.Icon sx={{ fontSize: 16 }} /></Avatar>
+                        <Box>
+                          <Typography sx={{ fontFamily: FONT_MONO, fontSize: 13 }}>{v.host}</Typography>
+                          <Typography sx={{ fontSize: 11.5, color: 'text.disabled' }}>{v.domain}</Typography>
+                        </Box>
+                      </Box>
+                    </TableCell>
+                    <TableCell><Typography sx={{ fontSize: 13, fontWeight: 700, color: theme.palette[m.color].main }}>{m.label}</Typography></TableCell>
+                    <TableCell><ConfidenceBar value={v.confidence_score} /></TableCell>
+                    <TableCell sx={{ fontSize: 13, color: 'text.secondary' }}>{v.found_at}</TableCell>
+                    <TableCell align="right">
+                      <Button size="small" variant="outlined" color="inherit" onClick={() => toggleFp(v)} sx={{ borderColor: 'divider', color: open ? 'text.secondary' : 'secondary.main', whiteSpace: 'nowrap' }}>
+                        {open ? 'Flag FP' : 'Restore'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+              {rows.length === 0 && (
+                <TableRow><TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.disabled' }}>No vulnerabilities match your filters.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
 
-        <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 3 }}>
-          <Tab label={`Findings (${findings.length})`} />
-          <Tab label="30-Day Trend" />
-          <Tab label="By Type" />
-          <Tab label="Confidence Score" />
-          <Tab label="Statistics" />
-        </Tabs>
-
-        {/* Findings — clickable severity summary + categorized list (Takeover vs CVE) */}
-        {tabValue === 0 && (
-          <>
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              {SEVERITY_CARDS.map((c) => (
-                <Grid item xs={6} sm={4} md={2.4} key={c.key}>
-                  <StatsCard
-                    title={c.label}
-                    value={sevCount(c.key)}
-                    accent={c.accent}
-                    selected={severityFilter === c.key}
-                    onClick={() => setSeverityFilter(c.key)}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-            <FindingsPanel findings={findings} severityFilter={severityFilter} />
-          </>
-        )}
-
-        {/* 30-Day Trend Chart */}
-        {tabValue === 1 && (
-          <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Vulnerabilities Discovered (Last 30 Days)
-            </Typography>
-            <ResponsiveContainer width="100%" height={400}>
-              <AreaChart data={trendData}>
-                <defs>
-                  <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={chartColor} stopOpacity={0.45} />
-                    <stop offset="100%" stopColor={chartColor} stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
-                <XAxis dataKey="date" tick={axisTick} stroke={gridColor} />
-                <YAxis tick={axisTick} stroke={gridColor} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: gridColor }} />
-                <Legend wrapperStyle={legendStyle} />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  stroke={chartColor}
-                  strokeWidth={2}
-                  fill="url(#trendFill)"
-                  activeDot={{ r: 5 }}
-                  name="Vulnerabilities Found"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Box>
-        )}
-
-        {/* Vulnerability Type Distribution */}
-        {tabValue === 2 && (
-          <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Vulnerabilities by Type
-            </Typography>
-            {typeData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <PieChart>
-                  <Pie
-                    data={typeData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {typeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={tooltipStyle} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <Typography color="textSecondary">No data available</Typography>
-            )}
-          </Box>
-        )}
-
-        {/* Confidence Score Distribution */}
-        {tabValue === 3 && (
-          <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Vulnerabilities by Confidence Score
-            </Typography>
-            {confidenceData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={confidenceData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                  <XAxis dataKey="severity" tick={axisTick} stroke={gridColor} />
-                  <YAxis tick={axisTick} stroke={gridColor} allowDecimals={false} />
-                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: alpha(chartColor, 0.08) }} />
-                  <Legend wrapperStyle={legendStyle} />
-                  <Bar dataKey="count" fill={chartColor} name="Count" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <Typography color="textSecondary">No data available</Typography>
-            )}
-          </Box>
-        )}
-
-        {/* Statistics */}
-        {tabValue === 4 && stats && (
-          <Box sx={{ bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 1 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Summary Statistics
-            </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
-              <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Total Vulnerabilities
-                </Typography>
-                <Typography variant="h4">{stats.total}</Typography>
-              </Box>
-              <Box sx={{ p: 2, borderRadius: 2, bgcolor: (t) => alpha(t.palette.error.main, t.palette.mode === 'dark' ? 0.18 : 0.1) }}>
-                <Typography variant="body2" color="text.secondary">
-                  Critical Severity
-                </Typography>
-                <Typography variant="h4" color="error.main">{stats.critical}</Typography>
-              </Box>
-              <Box sx={{ p: 2, borderRadius: 2, bgcolor: (t) => alpha(t.palette.warning.main, t.palette.mode === 'dark' ? 0.18 : 0.12) }}>
-                <Typography variant="body2" color="text.secondary">
-                  High Severity
-                </Typography>
-                <Typography variant="h4" color="warning.main">{stats.high}</Typography>
-              </Box>
-              <Box sx={{ p: 2, borderRadius: 2, bgcolor: (t) => alpha(t.palette.info.main, t.palette.mode === 'dark' ? 0.18 : 0.12) }}>
-                <Typography variant="body2" color="text.secondary">
-                  Average Confidence
-                </Typography>
-                <Typography variant="h4" color="info.main">{stats.avg_confidence.toFixed(1)}%</Typography>
-              </Box>
-            </Box>
-          </Box>
-        )}
-      </Container>
+      <Snackbar open={!!toast} autoHideDuration={2600} onClose={() => setToast('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <Alert severity="success" variant="filled" onClose={() => setToast('')}>{toast}</Alert>
+      </Snackbar>
     </Box>
   )
 }
+
+const tint = (color: string, mode: string) =>
+  mode === 'dark' ? color.replace('rgb(', 'rgba(').replace(')', ',0.16)') : color.replace('rgb(', 'rgba(').replace(')', ',0.12)')
