@@ -17,10 +17,16 @@ import type {
 
 // ---- helpers ------------------------------------------------------
 
-/** Compact relative time, e.g. "12 min ago", "3 h ago", "2 d ago". */
+/**
+ * Compact relative time, e.g. "12 min ago", "3 h ago", "2 d ago".
+ * The API emits naive UTC timestamps with no timezone marker; `new Date()`
+ * would parse those as local time, skewing the result by the UTC offset, so
+ * normalize to UTC by appending `Z` when no offset is present.
+ */
 export function timeAgo(iso: string | null | undefined): string {
   if (!iso) return 'never'
-  const t = new Date(iso).getTime()
+  const hasTz = /[zZ]|[+-]\d{2}:?\d{2}$/.test(iso)
+  const t = new Date(hasTz ? iso : `${iso}Z`).getTime()
   if (Number.isNaN(t)) return 'never'
   const s = Math.max(0, Math.round((Date.now() - t) / 1000))
   if (s < 60) return 'just now'
@@ -205,7 +211,7 @@ export async function fetchAuditLogs(): Promise<AuditLog[]> {
   const logs = await settingsAPI.listAuditLogs(100)
   return logs.map((l): AuditLog => ({
     id: l.id,
-    actor: `user #${l.user_id}`,
+    actor: l.user || `user #${l.user_id}`,
     action: l.action,
     target: l.resource || l.details || '—',
     source_ip: l.ip_address || '—',
