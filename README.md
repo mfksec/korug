@@ -10,6 +10,10 @@ Körüg (Old Turkic for "protection/guardian") automates subdomain discovery and
 
 All dashboards reflect real scan data: charts, alerts, and statistics are computed from your own scans, not seeded samples.
 
+<p align="center">
+    <img src="docs/images/dashboard.png" alt="Körüg dashboard — stat cards, findings timeline, risk distribution, latest vulnerabilities and recent alerts" width="900" />
+</p>
+
 # Features
 
 **Passive discovery**
@@ -25,12 +29,13 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 - Subdomain takeover detection — unclaimed S3 buckets, orphaned CNAME / MX / NS — with per-finding confidence scoring
 
 **Dashboard**
-- Redesigned React UI with a sidebar app shell and light/dark mode
-- Add, edit, and scan domains; per-scan opt-in port scanning
-- Live scan status with a Stop button — cancel an in-progress scan at any time
-- Assets page: a searchable, filterable list of every detected subdomain across all domains
-- Domain detail view: subdomains, IPs (grouped), HTTP/title/server, technologies, open ports, Cloudflare, vulnerabilities
-- Real-time analytics: 30-day discovery trend, severity distribution, and findings by type
+- Redesigned React UI — dark sidebar app shell, light/dark theme toggle, and a global search
+- Overview: domain / subdomain / open-issue / high-risk stat cards, a 14-day findings timeline, a risk-distribution donut, and panels for the latest vulnerabilities and recent alerts
+- Domains: searchable, sortable list with a per-domain risk roll-up; add or remove domains and drill into any one
+- Domain detail: discovered subdomains with DNS records, source attribution, live/orphan status, and on-demand rescan
+- Vulnerabilities: search, type/status filters, confidence scoring, and one-click false-positive flagging
+- Assets page: a searchable, filterable list of every detected subdomain across all domains, with IPs (grouped), HTTP/title/server, technologies, open ports, and Cloudflare
+- Live scan-status indicator in the sidebar while a discovery is running
 
 **Alerts & notifications**
 - In-app security alerts raised automatically from scan findings
