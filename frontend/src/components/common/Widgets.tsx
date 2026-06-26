@@ -8,15 +8,21 @@ import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined'
 import LinkOutlined from '@mui/icons-material/LinkOutlined'
 import DnsOutlined from '@mui/icons-material/DnsOutlined'
 import { FONT_MONO } from '@/styles/theme'
-import { RiskLevel, VulnType, SubdomainStatus, AlertSeverity } from '@/types/domain'
+import GppMaybeOutlined from '@mui/icons-material/GppMaybeOutlined'
+import { RiskLevel, SubdomainStatus, AlertSeverity } from '@/types/domain'
 
 // ---- meta helpers -------------------------------------------------
 
-export function vulnTypeMeta(type: VulnType) {
+// Backend vuln_type is open-ended (takeover types or "cve:CVE-…"); map the
+// known takeover kinds and fall back to a generic CVE/finding presentation.
+export function vulnTypeMeta(type: string) {
   switch (type) {
     case 's3_bucket_takeover': return { label: 'S3 takeover', color: 'error' as const, Icon: Inventory2Outlined }
     case 'cname_orphan': return { label: 'CNAME orphan', color: 'warning' as const, Icon: LinkOutlined }
-    default: return { label: 'DNS orphan', color: 'info' as const, Icon: DnsOutlined }
+    case 'dns_orphan': return { label: 'DNS orphan', color: 'info' as const, Icon: DnsOutlined }
+    default:
+      if (type.startsWith('cve:')) return { label: type.slice(4).toUpperCase(), color: 'error' as const, Icon: GppMaybeOutlined }
+      return { label: type.replace(/_/g, ' '), color: 'info' as const, Icon: GppMaybeOutlined }
   }
 }
 
