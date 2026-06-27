@@ -150,5 +150,92 @@ def test_get_scan_results_empty(client):
     assert data["vulnerabilities"] == []
 
 
+def _seed_subdomain(db, *, gone=False):
+    """Insert a domain + subdomain (with a finding, cert and change) for detail tests."""
+    from korug.models import Domain, Subdomain, Vulnerability, Certificate, AssetChange
+
+    domain = Domain(domain_name="example.com")
+    db.add(domain)
+    db.commit()
+    db.refresh(domain)
+
+    sub = Subdomain(domain_id=domain.id, subdomain="www.example.com", is_alive=True, is_gone=gone)
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+
+    db.add(Vulnerability(subdomain_id=sub.id, domain_id=domain.id, vuln_type="cname_orphan", confidence_score=85.0,
+                         details=json.dumps({"message": "dangling CNAME"})))
+    db.add(Certificate(subdomain_id=sub.id, domain_id=domain.id, issuer="CN=R3", common_name="www.example.com",
+                       sans=json.dumps(["www.example.com"]), serial_number="S1"))
+    db.add(AssetChange(domain_id=domain.id, subdomain_id=sub.id, change_type="subdomain_added",
+                       target=sub.subdomain, new_value="1.2.3.4"))
+    db.commit()
+    return domain, sub
+
+
+def test_get_subdomain_detail(client, db_session):
+    """Subdomain detail returns the asset plus its vulns, certs and changes."""
+    _, sub = _seed_subdomain(db_session)
+
+    response = client.get(f"/api/scans/subdomain/{sub.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["asset"]["subdomain"] == "www.example.com"
+    assert data["asset"]["domain_name"] == "example.com"
+    assert len(data["vulnerabilities"]) == 1
+    assert data["vulnerabilities"][0]["vuln_type"] == "cname_orphan"
+    assert len(data["certificates"]) == 1
+    assert data["certificates"][0]["serial_number"] == "S1"
+    assert any(c["change_type"] == "subdomain_added" for c in data["changes"])
+
+
+def test_get_subdomain_detail_404(client):
+    assert client.get("/api/scans/subdomain/99999").status_code == 404
+
+
+def test_list_assets_includes_gone_flag_and_sorts(client, db_session):
+    """Assets list exposes is_gone and honours the sort/dir params."""
+    _seed_subdomain(db_session, gone=True)
+
+    response = client.get("/api/scans/assets", params={"sort": "subdomain", "dir": "desc"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["assets"][0]["is_gone"] is True
+
+
+def test_list_assets_gone_filter(client, db_session):
+    _seed_subdomain(db_session, gone=True)
+    # Only gone assets
+    gone = client.get("/api/scans/assets", params={"gone": True}).json()
+    assert gone["count"] == 1
+    # No live assets
+    alive = client.get("/api/scans/assets", params={"gone": False}).json()
+    assert alive["count"] == 0
+
+
+def test_list_changes(client, db_session):
+    """The changes feed returns recorded asset changes with the domain name joined."""
+    _seed_subdomain(db_session)
+
+    response = client.get("/api/changes/")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    change = data["changes"][0]
+    assert change["change_type"] == "subdomain_added"
+    assert change["domain_name"] == "example.com"
+    assert change["target"] == "www.example.com"
+
+
+def test_list_changes_type_filter(client, db_session):
+    _seed_subdomain(db_session)
+    hit = client.get("/api/changes/", params={"change_type": "subdomain_added"}).json()
+    assert hit["count"] == 1
+    miss = client.get("/api/changes/", params={"change_type": "went_offline"}).json()
+    assert miss["count"] == 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

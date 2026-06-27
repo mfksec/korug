@@ -8,8 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Subdomain detail view**: every discovered subdomain is now clickable, opening
+  a per-host page with DNS records, fingerprint, open ports, vulnerabilities,
+  certificates, and a change timeline (`GET /api/scans/subdomain/{id}`).
+- **Certificate Transparency monitoring**: certificates are fetched from crt.sh,
+  stored per host, shown in the detail view, and a newly-observed certificate
+  raises a change/alert (`services/certificates.py`, `Certificate` model).
+- **Attack-surface change tracking**: scans diff each host against its prior state
+  and record an `AssetChange` log (subdomain added/removed/reappeared, went
+  live/offline, IP/tech/port changes, new certificate), surfaced on a new
+  **Changes** page and `GET /api/changes/`. Significant changes raise alerts.
+- **Automatic incremental CVE scanning**: after discovery, new/changed alive hosts
+  are checked against NVD automatically (previously manual-only), gated by
+  `ENABLE_AUTO_CVE` and bounded to keep scans fast.
+- **Gone-asset tracking**: subdomains that disappear from discovery are flagged
+  `is_gone` (kept for history) instead of being dropped.
+- **Sort + filter everywhere**: added to the Domain detail, Alerts, and Audit log
+  views; the new Assets and Changes views are fully sortable/filterable too.
 - **Assets page**: a dedicated, searchable/filterable view of every discovered
-  subdomain across all domains (`GET /api/scans/assets`).
+  subdomain across all domains (`GET /api/scans/assets`), now clickable into the
+  subdomain detail view, with gone-state filtering and server-side sort.
 - **Live scan status**: domain rows show a live "Scanning…" state, backed by
   `GET /api/scans/active` and `GET /api/scans/{id}/scan/status`.
 - **Stop scan**: cooperative cancellation via `POST /api/scans/{id}/scan/cancel`;
@@ -20,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker dev override (`docker/docker-compose.override.yml`) for API live-reload.
 
 ### Changed
+- The daily scheduler is now a continuous-monitoring loop: each run diffs the
+  surface and records changes, not just a fresh snapshot.
+- New settings `ENABLE_AUTO_CVE` and `ENABLE_CERT_MONITORING` gate the network-bound
+  incremental scan steps (both default on; disabled in the test suite).
 - Scans now persist **all** discovered subdomains (flagging resolve/alive state)
   instead of dropping names that don't currently resolve.
 - Discovery runs the local CLI tools concurrently with the passive HTTP sources

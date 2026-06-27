@@ -54,6 +54,22 @@ export function severityMeta(sev: AlertSeverity) {
 export const confidenceColor = (c: number): 'error' | 'warning' | 'info' =>
   c >= 90 ? 'error' : c >= 83 ? 'warning' : 'info'
 
+// Attack-surface change types → label + chip color for the Changes feed.
+export function changeTypeMeta(type: string): { label: string; color: 'error' | 'warning' | 'success' | 'info' | 'secondary' | 'default' } {
+  switch (type) {
+    case 'subdomain_added': return { label: 'New subdomain', color: 'success' }
+    case 'subdomain_readded': return { label: 'Reappeared', color: 'success' }
+    case 'subdomain_removed': return { label: 'Disappeared', color: 'default' }
+    case 'went_live': return { label: 'Went live', color: 'warning' }
+    case 'went_offline': return { label: 'Went offline', color: 'default' }
+    case 'ip_changed': return { label: 'IP changed', color: 'info' }
+    case 'tech_changed': return { label: 'Tech changed', color: 'info' }
+    case 'ports_changed': return { label: 'Ports changed', color: 'warning' }
+    case 'new_certificate': return { label: 'New certificate', color: 'secondary' }
+    default: return { label: type.replace(/_/g, ' '), color: 'default' }
+  }
+}
+
 // ---- shared widgets ----------------------------------------------
 
 interface TintChipProps { label: string; color: 'error' | 'warning' | 'success' | 'info' | 'secondary' | 'default'; dot?: boolean }

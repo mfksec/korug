@@ -17,6 +17,16 @@ os.environ.pop("REDIS_URL", None)
 os.environ.setdefault("ADMIN_USERNAME", "")
 # Auto-discovery disabled in tests so domain CRUD doesn't perform network I/O.
 os.environ.setdefault("ENABLE_AUTO_DISCOVERY", "false")
+# Network-bound scan steps disabled in tests (CVE lookup, crt.sh certificates).
+os.environ.setdefault("ENABLE_AUTO_CVE", "false")
+os.environ.setdefault("ENABLE_CVE_SCAN", "false")
+os.environ.setdefault("ENABLE_CERT_MONITORING", "false")
+# Keep integration config hermetic: a developer .env may carry a real Slack
+# webhook / SMTP creds, which would otherwise leak into the "defaults empty"
+# tests. Env vars take precedence over the .env file in pydantic-settings, so
+# blanking them here isolates the suite from local secrets.
+os.environ["SLACK_WEBHOOK_URL"] = ""
+os.environ["SLACK_ENABLED"] = "false"
 
 import pytest
 from sqlalchemy import create_engine

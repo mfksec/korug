@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Box, Button, Card, Grid, Avatar, Typography, Table, TableBody, TableCell,
-  TableHead, TableRow, TableContainer, useTheme, Tooltip, LinearProgress, Snackbar, Alert,
+  TableHead, TableRow, TableContainer, TableSortLabel, useTheme, Tooltip, LinearProgress, Snackbar, Alert,
 } from '@mui/material'
 import ArrowBackOutlined from '@mui/icons-material/ArrowBackOutlined'
 import PublicOutlined from '@mui/icons-material/PublicOutlined'
@@ -23,7 +23,9 @@ export function DomainDetailPage() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<'all' | 'live' | 'issues'>('all')
+  const [filter, setFilter] = useState<'all' | 'live' | 'issues' | 'gone'>('all')
+  const [sortBy, setSortBy] = useState<'host' | 'status'>('host')
+  const [dir, setDir] = useState<'asc' | 'desc'>('asc')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -42,10 +44,20 @@ export function DomainDetailPage() {
   const subs = useMemo(() => {
     if (!detail) return []
     let list = detail.subdomains.filter((s) => s.host.toLowerCase().includes(search.toLowerCase()))
-    if (filter === 'live') list = list.filter((s) => s.status === 'live')
+    if (filter === 'live') list = list.filter((s) => s.status === 'live' && !s.gone)
     else if (filter === 'issues') list = list.filter((s) => s.vuln_type)
-    return list
-  }, [detail, search, filter])
+    else if (filter === 'gone') list = list.filter((s) => s.gone)
+    const sign = dir === 'asc' ? 1 : -1
+    return [...list].sort((a, b) => {
+      if (sortBy === 'status') return a.status.localeCompare(b.status) * sign
+      return a.host.localeCompare(b.host) * sign
+    })
+  }, [detail, search, filter, sortBy, dir])
+
+  const sort = (col: 'host' | 'status') => {
+    if (sortBy === col) setDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortBy(col); setDir('asc') }
+  }
 
   const rescan = async () => {
     try {
@@ -111,7 +123,7 @@ export function DomainDetailPage() {
         <Typography variant="h6" sx={{ fontSize: 16 }}>Discovered subdomains</Typography>
         <Box sx={{ flex: 1 }} />
         <SearchField value={search} onChange={setSearch} placeholder="Filter hosts…" sx={{ minWidth: 220 }} />
-        <Segmented value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'live', label: 'Live' }, { value: 'issues', label: 'Issues' }]} />
+        <Segmented value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'live', label: 'Live' }, { value: 'issues', label: 'Issues' }, { value: 'gone', label: 'Gone' }]} />
       </Box>
 
       <Card>
@@ -119,9 +131,14 @@ export function DomainDetailPage() {
           <Table sx={{ '& td, & th': { borderColor: 'divider' } }}>
             <TableHead>
               <TableRow sx={{ bgcolor: 'surface.subtle' }}>
-                {['Host', 'DNS records', 'Source', 'Status'].map((h) => (
-                  <TableCell key={h} sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'text.disabled' }}>{h}</TableCell>
-                ))}
+                <TableCell sortDirection={sortBy === 'host' ? dir : false} sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'text.disabled' }}>
+                  <TableSortLabel active={sortBy === 'host'} direction={sortBy === 'host' ? dir : 'asc'} onClick={() => sort('host')}>Host</TableSortLabel>
+                </TableCell>
+                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'text.disabled' }}>DNS records</TableCell>
+                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'text.disabled' }}>Source</TableCell>
+                <TableCell sortDirection={sortBy === 'status' ? dir : false} sx={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'text.disabled' }}>
+                  <TableSortLabel active={sortBy === 'status'} direction={sortBy === 'status' ? dir : 'asc'} onClick={() => sort('status')}>Status</TableSortLabel>
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -129,7 +146,7 @@ export function DomainDetailPage() {
                 const m = subStatusMeta(s.status)
                 const recs = [s.a_records.length ? `A ${s.a_records.join(', ')}` : '', s.cname_record ? `CNAME ${s.cname_record}` : ''].filter(Boolean).join('  ·  ') || '—'
                 return (
-                  <TableRow key={s.id} hover>
+                  <TableRow key={s.id} hover sx={{ cursor: 'pointer', opacity: s.gone ? 0.55 : 1 }} onClick={() => navigate(`/subdomains/${s.id}`)}>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography sx={{ fontFamily: FONT_MONO, fontSize: 13 }}>{s.host}</Typography>
@@ -138,10 +155,13 @@ export function DomainDetailPage() {
                     </TableCell>
                     <TableCell sx={{ fontFamily: FONT_MONO, fontSize: 12, color: 'text.secondary' }}>{recs}</TableCell>
                     <TableCell sx={{ fontSize: 12.5, color: 'text.secondary' }}>{s.source}</TableCell>
-                    <TableCell><TintChip label={m.label} color={m.color} dot /></TableCell>
+                    <TableCell><TintChip label={s.gone ? 'Gone' : m.label} color={s.gone ? 'default' : m.color} dot /></TableCell>
                   </TableRow>
                 )
               })}
+              {subs.length === 0 && !loading && (
+                <TableRow><TableCell colSpan={4} align="center" sx={{ py: 5, color: 'text.disabled' }}>No subdomains match your filter.</TableCell></TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>

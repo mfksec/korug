@@ -164,6 +164,38 @@ class VulnerabilityResponse(BaseModel):
         from_attributes = True
 
 
+# Certificate Schemas
+class CertificateResponse(BaseModel):
+    id: int
+    subdomain_id: int
+    domain_id: int
+    issuer: Optional[str] = None
+    common_name: Optional[str] = None
+    sans: Optional[list[str]] = None
+    serial_number: Optional[str] = None
+    not_before: Optional[datetime] = None
+    not_after: Optional[datetime] = None
+    source: Optional[str] = None
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+
+
+# Asset Change Schemas
+class AssetChangeResponse(BaseModel):
+    id: int
+    domain_id: int
+    subdomain_id: Optional[int] = None
+    scan_id: Optional[int] = None
+    change_type: str
+    target: Optional[str] = None
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    detected_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # Scan History Schemas
 class ScanHistoryResponse(BaseModel):
     id: int

@@ -10,6 +10,9 @@ import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DomainsPage } from './pages/DomainsPage'
 import { DomainDetailPage } from './pages/DomainDetailPage'
+import { SubdomainDetailPage } from './pages/SubdomainDetailPage'
+import { AssetsPage } from './pages/AssetsPage'
+import { ChangesPage } from './pages/ChangesPage'
 import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -65,6 +68,9 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/domains" element={<DomainsPage />} />
               <Route path="/domains/:id" element={<DomainDetailPage />} />
+              <Route path="/subdomains/:id" element={<SubdomainDetailPage />} />
+              <Route path="/assets" element={<AssetsPage />} />
+              <Route path="/changes" element={<ChangesPage />} />
               <Route path="/vulnerabilities" element={<VulnerabilitiesPage />} />
               <Route path="/alerts" element={<AlertsPage />} />
               <Route path="/audit-logs" element={<AuditLogsPage />} />
