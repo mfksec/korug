@@ -13,6 +13,8 @@ from korug.models import (
     Domain,
     Subdomain,
     Vulnerability,
+    Certificate,
+    AssetChange,
     ScanHistory,
     Alert,
     SubdomainResponse,
@@ -20,6 +22,9 @@ from korug.models import (
     ScanHistoryResponse,
 )
 from korug.services import discovery_service, enrichment_service, takeover_detector
+from korug.services import cve as cve_service
+from korug.services import certificates as cert_service
+from korug.services import changes as change_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,6 +52,139 @@ def _alert_message(subdomain: str, vuln_type: str, details: str | None) -> str:
         except (ValueError, TypeError):
             pass
     return f"{subdomain}: {summary}"
+
+
+def _host_state(res) -> dict:
+    """Snapshot the comparable fields of an enrichment result for change diffing."""
+    return {
+        "is_alive": bool(res.is_alive) if res else False,
+        "status_code": res.status_code if res else None,
+        "resolved_ips": list(res.resolved_ips) if res else [],
+        "technologies": list(res.technologies) if res else [],
+        "open_ports": list(res.open_ports) if res else [],
+    }
+
+
+def _subdomain_state(sub: Subdomain) -> dict:
+    """Snapshot the comparable fields of a persisted subdomain (its prior state)."""
+    return {
+        "is_alive": bool(sub.is_alive),
+        "status_code": sub.status_code,
+        "resolved_ips": _json_list(sub.resolved_ips) or _json_list(sub.a_records),
+        "technologies": _json_list(sub.technologies),
+        "open_ports": _json_list(sub.open_ports),
+    }
+
+
+async def _scan_cves(db: Session, sub: Subdomain, res, nvd_key: str | None) -> int:
+    """Look up CVEs for a host's fingerprinted software and upsert findings.
+
+    Shared by the manual per-subdomain scan and the incremental auto-scan.
+    Returns the count of newly-created findings.
+    """
+    if not res:
+        return 0
+    try:
+        cves = await cve_service.lookup(res.web_server, res.technologies, api_key=nvd_key)
+    except Exception as e:
+        logger.warning("CVE lookup failed for %s: %s", sub.subdomain, e)
+        return 0
+
+    new_vulns = 0
+    for c in cves:
+        vuln_type = f"cve:{c['cve_id']}"
+        existing = db.query(Vulnerability).filter(
+            Vulnerability.subdomain_id == sub.id,
+            Vulnerability.vuln_type == vuln_type,
+        ).first()
+        score = float(c["cvss"]) * 10 if c.get("cvss") else 50.0
+        details = json.dumps({
+            "category": "cve",
+            "cve_id": c["cve_id"],
+            "cvss": c.get("cvss"),
+            "severity": c.get("severity"),
+            "product": c.get("product"),
+            "version": c.get("version"),
+            "summary": c.get("summary"),
+            "match": "keyword",
+            "message": f"{c.get('product')} {c.get('version')}: {c['cve_id']} ({c.get('severity')})",
+        })
+        if existing:
+            existing.confidence_score = score
+            existing.details = details
+            db.add(existing)
+            continue
+        new_vulns += 1
+        db_vuln = Vulnerability(
+            subdomain_id=sub.id, domain_id=sub.domain_id,
+            vuln_type=vuln_type, confidence_score=score, details=details,
+        )
+        db.add(db_vuln)
+        db.flush()
+        # Alert on the serious ones only.
+        if (c.get("severity") or "").upper() in ("HIGH", "CRITICAL"):
+            db.add(Alert(
+                domain_id=sub.domain_id, vulnerability_id=db_vuln.id, target=sub.subdomain,
+                alert_type="cve", severity=(c["severity"] or "high").lower(),
+                message=f"{sub.subdomain}: {c['cve_id']} in {c.get('product')} {c.get('version')}",
+            ))
+    return new_vulns
+
+
+async def _scan_certificates(db: Session, sub: Subdomain, scan_id: int | None = None) -> int:
+    """Fetch crt.sh certificates for a host and upsert them.
+
+    The first observation of a host establishes a silent baseline; on later
+    scans a previously-unseen serial is recorded as a ``new_certificate`` change
+    (and alerted). Returns the count of newly-stored certificates.
+    """
+    had_baseline = db.query(Certificate).filter(Certificate.subdomain_id == sub.id).count() > 0
+    try:
+        certs = await cert_service.fetch_certificates(sub.subdomain)
+    except Exception as e:
+        logger.warning("Certificate fetch failed for %s: %s", sub.subdomain, e)
+        return 0
+
+    new_certs = 0
+    for c in certs:
+        serial = c.get("serial_number")
+        existing = None
+        if serial:
+            existing = db.query(Certificate).filter(
+                Certificate.subdomain_id == sub.id,
+                Certificate.serial_number == serial,
+            ).first()
+        if existing:
+            existing.last_seen = datetime.utcnow()
+            existing.issuer = c.get("issuer")
+            existing.common_name = c.get("common_name")
+            existing.sans = json.dumps(c.get("sans") or [])
+            existing.not_before = c.get("not_before")
+            existing.not_after = c.get("not_after")
+            db.add(existing)
+            continue
+        new_certs += 1
+        db.add(Certificate(
+            subdomain_id=sub.id, domain_id=sub.domain_id,
+            issuer=c.get("issuer"), common_name=c.get("common_name"),
+            sans=json.dumps(c.get("sans") or []),
+            serial_number=serial,
+            not_before=c.get("not_before"), not_after=c.get("not_after"),
+            source=c.get("source") or "crt.sh",
+        ))
+        # Only flag genuinely-new issuances once a baseline exists, so the first
+        # scan doesn't alert on every historical certificate.
+        if had_baseline:
+            change_service.record_changes(
+                db, domain_id=sub.domain_id, subdomain_id=sub.id, scan_id=scan_id,
+                target=sub.subdomain,
+                changes=[{
+                    "change_type": "new_certificate",
+                    "old_value": None,
+                    "new_value": f"{c.get('common_name') or '?'} ({c.get('issuer') or 'unknown issuer'})",
+                }],
+            )
+    return new_certs
 
 
 # Scan lifecycle states. A scan moves running -> completed/failed, or a cancel
@@ -118,6 +256,8 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
             new_subdomains = 0
             vulnerabilities_found = 0
             persisted = 0
+            # subdomain ids worth a CVE/cert pass this scan (new or changed-alive)
+            incremental_ids: list[int] = []
 
             for idx, subdomain in enumerate(names):
                 # Cooperative cancellation: check periodically through the loop.
@@ -136,6 +276,10 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                     Subdomain.domain_id == domain_id,
                     Subdomain.subdomain == subdomain,
                 ).first()
+
+                # Capture prior state for change detection before we overwrite it.
+                prior_state = _subdomain_state(existing) if existing else None
+                was_gone = bool(existing.is_gone) if existing else False
 
                 if not existing:
                     new_subdomains += 1
@@ -162,8 +306,37 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                 db_subdomain.open_ports = json.dumps(res.open_ports if res else [])
                 db_subdomain.is_cloudflare = res.is_cloudflare if res else False
                 db_subdomain.last_enriched = datetime.utcnow()
+                # Touch last_seen explicitly so "seen this scan" is unambiguous
+                # even when no other column changed (drives gone-detection below).
+                db_subdomain.last_seen = datetime.utcnow()
+                # A name seen again is no longer gone.
+                db_subdomain.is_gone = False
+                db_subdomain.gone_at = None
                 db.add(db_subdomain)
                 db.flush()
+
+                # Record attack-surface changes for this host.
+                current_state = _host_state(res)
+                diffs = change_service.diff_subdomain(prior_state, current_state)
+                if prior_state is None:
+                    diffs = [{"change_type": "subdomain_added", "old_value": None,
+                              "new_value": ", ".join(current_state["resolved_ips"]) or None}]
+                elif was_gone:
+                    diffs = [{"change_type": "subdomain_readded", "old_value": None,
+                              "new_value": ", ".join(current_state["resolved_ips"]) or None}] + diffs
+                if diffs:
+                    change_service.record_changes(
+                        db, domain_id=domain_id, subdomain_id=db_subdomain.id,
+                        scan_id=scan.id, target=subdomain, changes=diffs,
+                    )
+
+                # A host is "incremental" (worth a CVE/cert pass) if it's new, was
+                # gone, or its alive/tech state changed — keeps NVD volume bounded.
+                tech_or_alive_changed = any(
+                    d["change_type"] in ("went_live", "tech_changed") for d in diffs
+                )
+                if current_state["is_alive"] and (prior_state is None or was_gone or tech_or_alive_changed):
+                    incremental_ids.append(db_subdomain.id)
 
                 # Check for takeover vulnerabilities
                 vulnerabilities = await takeover_detector.check_takeover_risks(
@@ -202,9 +375,52 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                         existing_vuln.confidence_score = vuln["confidence_score"]
                         existing_vuln.details = vuln["details"]
                         db.add(existing_vuln)
-            
+
             db.commit()
-            
+
+            # Incremental enrichment: CVE lookup + certificate monitoring, run
+            # only for the bounded set of new/changed alive hosts. Both are
+            # network-bound and opt-out via settings; failures never fail a scan.
+            from korug.config import get_settings
+            cfg = get_settings()
+            if incremental_ids and (cfg.enable_auto_cve or cfg.enable_cert_monitoring):
+                from korug.api.integrations import get_recon_keys
+                nvd_key = get_recon_keys(db).get("nvd") or cfg.nvd_api_key or None
+                for sub_id in incremental_ids:
+                    if _scan_cancel_requested(db, scan.id):
+                        db.commit()
+                        raise _ScanCancelled()
+                    sub = db.query(Subdomain).filter(Subdomain.id == sub_id).first()
+                    if not sub:
+                        continue
+                    res = enriched.get(sub.subdomain)
+                    if cfg.enable_auto_cve:
+                        vulnerabilities_found += await _scan_cves(db, sub, res, nvd_key)
+                    if cfg.enable_cert_monitoring:
+                        await _scan_certificates(db, sub, scan_id=scan.id)
+                db.commit()
+
+            # Gone-tracking: names present in a prior scan but absent from this
+            # one (last_seen older than this scan) are flagged gone + logged once.
+            gone_subs = db.query(Subdomain).filter(
+                Subdomain.domain_id == domain_id,
+                Subdomain.is_gone.is_(False),
+                Subdomain.last_seen < start_time,
+            ).all()
+            for gone in gone_subs:
+                gone.is_gone = True
+                gone.gone_at = datetime.utcnow()
+                db.add(gone)
+                change_service.record_changes(
+                    db, domain_id=domain_id, subdomain_id=gone.id, scan_id=scan.id,
+                    target=gone.subdomain,
+                    changes=[{"change_type": "subdomain_removed",
+                              "old_value": ", ".join(_json_list(gone.resolved_ips)) or None,
+                              "new_value": None}],
+                )
+            if gone_subs:
+                db.commit()
+
             # Update scan history
             scan.status = "completed"
             scan.total_subdomains = persisted
@@ -376,6 +592,9 @@ def list_assets(
     q: str | None = Query(None, description="Substring match on subdomain name"),
     alive: bool | None = Query(None, description="Filter by HTTP-alive state"),
     resolved: bool | None = Query(None, description="Filter by whether the name resolves"),
+    gone: bool | None = Query(None, description="Filter by gone (disappeared) state"),
+    sort: str = Query("subdomain", description="Sort column: subdomain, last_seen, first_discovered, status_code"),
+    dir: str = Query("asc", description="Sort direction: asc or desc"),
     skip: int = 0,
     limit: int = Query(500, le=2000),
     db: Session = Depends(get_db),
@@ -395,9 +614,20 @@ def list_assets(
         query = query.filter(Subdomain.subdomain.ilike(f"%{q}%"))
     if alive is not None:
         query = query.filter(Subdomain.is_alive.is_(alive))
+    if gone is not None:
+        query = query.filter(Subdomain.is_gone.is_(gone))
 
     total = query.count()
-    rows = query.order_by(Subdomain.subdomain.asc()).offset(skip).limit(limit).all()
+
+    sort_cols = {
+        "subdomain": Subdomain.subdomain,
+        "last_seen": Subdomain.last_seen,
+        "first_discovered": Subdomain.first_discovered,
+        "status_code": Subdomain.status_code,
+    }
+    col = sort_cols.get(sort, Subdomain.subdomain)
+    col = col.desc() if dir == "desc" else col.asc()
+    rows = query.order_by(col).offset(skip).limit(limit).all()
 
     assets = []
     for sub, domain_name in rows:
@@ -489,55 +719,16 @@ async def scan_subdomain(
             message=_alert_message(sub.subdomain, vuln["vuln_type"], vuln["details"]),
         ))
 
-    # CVE lookup (best-effort, keyword+version against NVD) for this host's
-    # fingerprinted software. Optional; runs only on this manual scan.
+    # CVE lookup + certificate monitoring (best-effort) for this host. Both reuse
+    # the shared helpers so the manual and incremental auto-scan stay in lockstep.
     from korug.config import get_settings
-    if get_settings().enable_cve_scan and res:
-        from korug.services import cve as cve_service
+    cfg = get_settings()
+    if cfg.enable_cve_scan and res:
         from korug.api.integrations import get_recon_keys
-        nvd_key = get_recon_keys(db).get("nvd") or get_settings().nvd_api_key or None
-        try:
-            cves = await cve_service.lookup(res.web_server, res.technologies, api_key=nvd_key)
-        except Exception as e:
-            logger.warning("CVE lookup failed for %s: %s", sub.subdomain, e)
-            cves = []
-        for c in cves:
-            vuln_type = f"cve:{c['cve_id']}"
-            existing = db.query(Vulnerability).filter(
-                Vulnerability.subdomain_id == sub.id,
-                Vulnerability.vuln_type == vuln_type,
-            ).first()
-            score = float(c["cvss"]) * 10 if c.get("cvss") else 50.0
-            details = json.dumps({
-                "category": "cve",
-                "cve_id": c["cve_id"],
-                "cvss": c.get("cvss"),
-                "severity": c.get("severity"),
-                "product": c.get("product"),
-                "version": c.get("version"),
-                "summary": c.get("summary"),
-                "match": "keyword",
-                "message": f"{c.get('product')} {c.get('version')}: {c['cve_id']} ({c.get('severity')})",
-            })
-            if existing:
-                existing.confidence_score = score
-                existing.details = details
-                db.add(existing)
-                continue
-            new_vulns += 1
-            db_vuln = Vulnerability(
-                subdomain_id=sub.id, domain_id=sub.domain_id,
-                vuln_type=vuln_type, confidence_score=score, details=details,
-            )
-            db.add(db_vuln)
-            db.flush()
-            # Alert on the serious ones only.
-            if (c.get("severity") or "").upper() in ("HIGH", "CRITICAL"):
-                db.add(Alert(
-                    domain_id=sub.domain_id, vulnerability_id=db_vuln.id, target=sub.subdomain,
-                    alert_type="cve", severity=(c["severity"] or "high").lower(),
-                    message=f"{sub.subdomain}: {c['cve_id']} in {c.get('product')} {c.get('version')}",
-                ))
+        nvd_key = get_recon_keys(db).get("nvd") or cfg.nvd_api_key or None
+        new_vulns += await _scan_cves(db, sub, res, nvd_key)
+    if cfg.enable_cert_monitoring:
+        await _scan_certificates(db, sub)
 
     db.commit()
     db.refresh(sub)
@@ -545,6 +736,67 @@ async def scan_subdomain(
     asset["domain_id"] = sub.domain_id
     asset["resolves"] = bool(asset["resolved_ips"])
     return {"asset": asset, "new_vulnerabilities": new_vulns}
+
+
+@router.get("/subdomain/{subdomain_id}")
+def get_subdomain_detail(
+    subdomain_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Full detail for one subdomain: asset + vulnerabilities + certificates + changes.
+
+    Powers the per-host detail view.
+    """
+    sub = db.query(Subdomain).filter(Subdomain.id == subdomain_id).first()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subdomain not found")
+
+    domain = db.query(Domain).filter(Domain.id == sub.domain_id).first()
+    vulns = db.query(Vulnerability).filter(Vulnerability.subdomain_id == sub.id).all()
+    certs = db.query(Certificate).filter(
+        Certificate.subdomain_id == sub.id
+    ).order_by(Certificate.not_before.desc().nullslast()).all()
+    changes = db.query(AssetChange).filter(
+        AssetChange.subdomain_id == sub.id
+    ).order_by(AssetChange.detected_at.desc()).limit(50).all()
+
+    asset = _serialize_subdomain(sub)
+    asset["domain_id"] = sub.domain_id
+    asset["domain_name"] = domain.domain_name if domain else None
+    asset["resolves"] = bool(asset["resolved_ips"])
+    asset["last_seen"] = sub.last_seen.isoformat() + "Z" if sub.last_seen else None
+    asset["gone_at"] = sub.gone_at.isoformat() + "Z" if sub.gone_at else None
+
+    return {
+        "asset": asset,
+        "vulnerabilities": [_serialize_vuln(v) for v in vulns],
+        "certificates": [_serialize_cert(c) for c in certs],
+        "changes": [_serialize_change(ch) for ch in changes],
+    }
+
+
+@router.post("/subdomain/{subdomain_id}/certificates/refresh")
+async def refresh_subdomain_certificates(
+    subdomain_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Re-fetch certificates from crt.sh for one host and upsert them.
+
+    Returns the refreshed certificate list and how many were newly stored.
+    """
+    sub = db.query(Subdomain).filter(Subdomain.id == subdomain_id).first()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subdomain not found")
+
+    new_certs = await _scan_certificates(db, sub)
+    db.commit()
+
+    certs = db.query(Certificate).filter(
+        Certificate.subdomain_id == sub.id
+    ).order_by(Certificate.not_before.desc().nullslast()).all()
+    return {"new_certificates": new_certs, "certificates": [_serialize_cert(c) for c in certs]}
 
 
 @router.get("/{domain_id}/results")
@@ -637,7 +889,39 @@ def _serialize_subdomain(s: Subdomain) -> dict:
         "technologies": _json_list(s.technologies),
         "open_ports": _json_list(s.open_ports),
         "is_cloudflare": bool(s.is_cloudflare),
+        "is_gone": bool(s.is_gone),
         "first_discovered": s.first_discovered.isoformat() + "Z" if s.first_discovered else None,
+    }
+
+
+def _serialize_cert(c: Certificate) -> dict:
+    return {
+        "id": c.id,
+        "subdomain_id": c.subdomain_id,
+        "domain_id": c.domain_id,
+        "issuer": c.issuer,
+        "common_name": c.common_name,
+        "sans": _json_list(c.sans),
+        "serial_number": c.serial_number,
+        "not_before": c.not_before.isoformat() + "Z" if c.not_before else None,
+        "not_after": c.not_after.isoformat() + "Z" if c.not_after else None,
+        "source": c.source,
+        "first_seen": c.first_seen.isoformat() + "Z" if c.first_seen else None,
+        "last_seen": c.last_seen.isoformat() + "Z" if c.last_seen else None,
+    }
+
+
+def _serialize_change(ch: AssetChange) -> dict:
+    return {
+        "id": ch.id,
+        "domain_id": ch.domain_id,
+        "subdomain_id": ch.subdomain_id,
+        "scan_id": ch.scan_id,
+        "change_type": ch.change_type,
+        "target": ch.target,
+        "old_value": ch.old_value,
+        "new_value": ch.new_value,
+        "detected_at": ch.detected_at.isoformat() + "Z" if ch.detected_at else None,
     }
 
 

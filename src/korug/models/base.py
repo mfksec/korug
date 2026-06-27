@@ -40,6 +40,8 @@ class Domain(Base):
     subdomains = relationship("Subdomain", back_populates="domain", cascade="all, delete-orphan")
     scan_history = relationship("ScanHistory", back_populates="domain", cascade="all, delete-orphan")
     vulnerabilities = relationship("Vulnerability", back_populates="domain", cascade="all, delete-orphan")
+    certificates = relationship("Certificate", back_populates="domain", cascade="all, delete-orphan")
+    changes = relationship("AssetChange", back_populates="domain", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Domain(id={self.id}, domain_name={self.domain_name})>"
@@ -76,6 +78,12 @@ class Subdomain(Base):
     is_cloudflare = Column(Boolean, default=False)    # resolved IP in Cloudflare ranges
     last_enriched = Column(DateTime, nullable=True)
 
+    # Lifecycle: a name discovered in a prior scan but absent from the latest
+    # one is flagged ``is_gone`` (kept visible for attack-surface history rather
+    # than deleted). Re-discovery clears the flag.
+    is_gone = Column(Boolean, default=False, nullable=False)
+    gone_at = Column(DateTime, nullable=True)
+
     # Status and timestamps
     first_discovered = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -83,6 +91,7 @@ class Subdomain(Base):
     # Relationships
     domain = relationship("Domain", back_populates="subdomains")
     vulnerabilities = relationship("Vulnerability", back_populates="subdomain", cascade="all, delete-orphan")
+    certificates = relationship("Certificate", back_populates="subdomain", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Subdomain(id={self.id}, subdomain={self.subdomain})>"
@@ -112,6 +121,68 @@ class Vulnerability(Base):
 
     def __repr__(self) -> str:
         return f"<Vulnerability(id={self.id}, vuln_type={self.vuln_type}, confidence={self.confidence_score})>"
+
+
+class Certificate(Base):
+    """Certificate model - TLS certificates observed for a subdomain.
+
+    Sourced from Certificate Transparency logs (crt.sh). One row per distinct
+    certificate (keyed logically by ``serial_number``); re-observing a known
+    serial just refreshes ``last_seen``. A newly-seen serial is an
+    attack-surface signal (new service / cert issuance) and raises a change.
+    """
+    __tablename__ = "certificates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subdomain_id = Column(Integer, ForeignKey("subdomains.id"), nullable=False, index=True)
+    domain_id = Column(Integer, ForeignKey("domains.id"), nullable=False, index=True)
+
+    issuer = Column(String(512), nullable=True)
+    common_name = Column(String(255), nullable=True, index=True)
+    sans = Column(Text, nullable=True)            # JSON array of subject alt names
+    serial_number = Column(String(128), nullable=True, index=True)
+    not_before = Column(DateTime, nullable=True)
+    not_after = Column(DateTime, nullable=True)
+    source = Column(String(50), default="crt.sh")
+
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    subdomain = relationship("Subdomain", back_populates="certificates")
+    domain = relationship("Domain", back_populates="certificates")
+
+    def __repr__(self) -> str:
+        return f"<Certificate(id={self.id}, cn={self.common_name}, serial={self.serial_number})>"
+
+
+class AssetChange(Base):
+    """AssetChange model - the attack-surface change log.
+
+    Each row records one observed change to the monitored surface (a subdomain
+    appearing/disappearing, going live/offline, an IP/tech/port change, or a new
+    certificate). Powers the Changes activity feed and feeds the alerting layer.
+    """
+    __tablename__ = "asset_changes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    domain_id = Column(Integer, ForeignKey("domains.id"), nullable=False, index=True)
+    subdomain_id = Column(Integer, ForeignKey("subdomains.id"), nullable=True, index=True)
+    scan_id = Column(Integer, ForeignKey("scan_history.id"), nullable=True, index=True)
+
+    # One of: subdomain_added, subdomain_removed, subdomain_readded, went_live,
+    # went_offline, ip_changed, tech_changed, ports_changed, new_certificate
+    change_type = Column(String(50), nullable=False, index=True)
+    target = Column(String(255), nullable=True)   # affected host, for display
+    old_value = Column(Text, nullable=True)
+    new_value = Column(Text, nullable=True)
+    detected_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Relationships
+    domain = relationship("Domain", back_populates="changes")
+
+    def __repr__(self) -> str:
+        return f"<AssetChange(id={self.id}, type={self.change_type}, target={self.target})>"
 
 
 class ScanHistory(Base):

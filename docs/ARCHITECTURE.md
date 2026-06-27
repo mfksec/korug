@@ -21,6 +21,9 @@ The frontend is a single-page React/Vite app (MUI + Recharts). The backend is Fa
 - **discovery.py** — aggregates subdomains concurrently from many free web sources (crt.sh, HackerTarget, CertSpotter, RapidDNS, AlienVault OTX, ThreatMiner, Wayback, BufferOver, ThreatCrowd), key-gated providers (VirusTotal, SecurityTrails, BinaryEdge, Censys, urlscan, Shodan), and local Subfinder/Amass. Per-source attribution; best-effort.
 - **enrichment.py** — concurrent DNS resolution, HTTP(S) probing (status/title/server, https→http fallback), technology fingerprinting, Cloudflare IP-range detection, and an optional port scan (nmap with `-sV` when available, else an async TCP connect scan; nmap XML parsed with defusedxml).
 - **takeover_detection.py** — scores takeover risk: unclaimed S3 buckets (boto3), orphaned CNAME, and orphaned MX/NS (dnspython). Each finding gets a 0–100 confidence.
+- **cve.py** — best-effort CVE lookup against the public NVD API by product+version keyword, with an in-process TTL cache and rate-limit-aware pacing (an NVD key raises the limit).
+- **certificates.py** — Certificate Transparency lookup via crt.sh (issuer, CN, SANs, serial, validity), de-duplicated by serial, cached in-process.
+- **changes.py** — attack-surface change detection: pure `diff_subdomain()` plus `record_changes()`, which persists `AssetChange` rows and raises `Alert`s for the significant ones.
 - **slack_integration.py** — posts alerts/summaries to a Slack webhook.
 - **email_integration.py** — sends alerts/test mail over SMTP (stateless; config passed in).
 
@@ -30,8 +33,10 @@ The frontend is a single-page React/Vite app (MUI + Recharts). The backend is Fa
 |-------|---------|
 | `User` | Accounts, roles, password hash |
 | `Domain` | A monitored domain |
-| `Subdomain` | Discovered subdomain + DNS records, sources, and enrichment (IPs, HTTP status/title/server, technologies, open ports, Cloudflare) |
+| `Subdomain` | Discovered subdomain + DNS records, sources, and enrichment (IPs, HTTP status/title/server, technologies, open ports, Cloudflare); `is_gone`/`gone_at` flag names that disappeared |
 | `Vulnerability` | Finding with type, confidence, false-positive flag |
+| `Certificate` | TLS certificate observed for a subdomain (issuer, CN, SANs, serial, validity), sourced from crt.sh |
+| `AssetChange` | The attack-surface change log: one row per observed change (added/removed/live/offline/IP/tech/ports/new-cert) |
 | `ScanHistory` | Per-scan stats and status |
 | `Alert` | Alert raised from a finding (resolvable) |
 | `ApiKey` | Hashed API keys (masked display) |
@@ -41,7 +46,7 @@ The frontend is a single-page React/Vite app (MUI + Recharts). The backend is Fa
 
 ## API layer (`src/korug/api/`)
 
-`domains`, `scans`, `vulnerabilities`, `alerts`, `users`, `integrations`, `settings`, `export` — plus auth routes in `main.py`. Auth is enforced by a `get_current_user` dependency; admin-only routes use `require_role("admin")`. Audit events are written through `audit.py`.
+`domains`, `scans`, `changes`, `vulnerabilities`, `alerts`, `users`, `integrations`, `settings`, `export` — plus auth routes in `main.py`. Auth is enforced by a `get_current_user` dependency; admin-only routes use `require_role("admin")`. Audit events are written through `audit.py`.
 
 ## Scan flow
 
@@ -50,14 +55,30 @@ trigger (dashboard / CLI / API / scheduler)
   → discovery: aggregate names from all configured sources (concurrent)
   → enrichment: resolve DNS → group by IP → HTTP(S) probe → tech + Cloudflare
                 → optional port scan
-  → upsert resolvable subdomains with their enrichment
+  → upsert ALL discovered subdomains with their enrichment
+  → diff each host vs its prior state → record AssetChange + alerts
   → takeover detection per subdomain
+  → incremental pass (new/changed alive hosts only): CVE lookup + crt.sh certs
+  → mark disappeared names is_gone (record subdomain_removed once)
   → store vulnerabilities, raise Alerts for new findings
   → notify Slack / email (if enabled)
   → record ScanHistory
 ```
 
-The scheduler (`scheduler.py`, APScheduler) runs scans daily at the configured time.
+The scheduler (`scheduler.py`, APScheduler) re-runs this for every enabled domain
+daily at the configured time — the continuous-monitoring loop. CVE and certificate
+work is gated to the incremental set (and to `ENABLE_AUTO_CVE` / `ENABLE_CERT_MONITORING`)
+so repeated scans stay fast and within NVD/crt.sh rate limits.
+
+## Attack-surface monitoring roadmap
+
+Built: per-host detail views, certificate transparency monitoring, automatic
+incremental vulnerability scanning, and the asset change-log with change alerts.
+Planned next: per-domain scan cadence; routing change-alerts through the existing
+Slack/email integrations; exposure-over-time trend dashboards; port/service & tech
+drift views; IP/ASN grouping; CT-log streaming beyond crt.sh; exportable ASM
+reports; finding aging/SLA; and adopting Alembic for real migrations (today new
+columns are added best-effort at startup by `db._add_missing_columns`).
 
 ## Stack
 

@@ -49,9 +49,18 @@ Admin-only endpoints are marked 🔒.
 | POST | `/api/scans/{domain_id}/scan/cancel` | request cancellation of the running scan (cooperative) |
 | GET | `/api/scans/{domain_id}/scan/status` | latest scan status for a domain (for live polling) |
 | GET | `/api/scans/active` | all currently running/cancelling scans |
+| POST | `/api/scans/subdomain/{id}/scan` | re-scan one host (DNS/HTTP/tech/ports + takeover + CVE + certs) |
+| GET | `/api/scans/subdomain/{id}` | full host detail: asset + vulnerabilities + certificates + changes |
+| POST | `/api/scans/subdomain/{id}/certificates/refresh` | re-fetch certificates from crt.sh for one host |
 | GET | `/api/scans/{domain_id}/results` | enriched results: subdomains, IP groups, vulnerabilities |
-| GET | `/api/scans/assets` | all discovered subdomains across domains (filters: `domain_id`, `q`, `alive`, `resolved`) |
+| GET | `/api/scans/assets` | all discovered subdomains across domains (filters: `domain_id`, `q`, `alive`, `resolved`, `gone`; sort via `sort`/`dir`) |
 | GET | `/api/scans/history/{domain_id}` | scan history |
+
+### Changes (attack-surface activity)
+| Method | Path | |
+|--------|------|--|
+| GET | `/api/changes/` | change feed (filters: `domain_id`, `change_type`, `since_days`; sort via `sort`/`dir`) |
+| GET | `/api/changes/stats/summary?since_days=7` | change counts by type over a window |
 
 ### Vulnerabilities
 | Method | Path | |

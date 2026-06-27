@@ -138,6 +138,7 @@ export async function fetchDomainDetail(id: number): Promise<DomainDetail> {
     cname_record: s.cname,
     source: s.sources?.[0] ?? 'dns',
     status: subStatus(s.is_alive, s.cname),
+    gone: Boolean(s.is_gone),
     vuln_type: vulnBySub.get(s.id) ?? null,
   }))
 

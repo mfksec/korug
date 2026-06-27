@@ -27,13 +27,25 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 - Technology fingerprinting and Cloudflare detection
 - Optional port scan (nmap with service/version when available, else built-in TCP scan)
 - Subdomain takeover detection — unclaimed S3 buckets, orphaned CNAME / MX / NS — with per-finding confidence scoring
+- Automatic CVE lookup (NVD) for new/changed live hosts, using fingerprinted product+version
+- Certificate Transparency monitoring via crt.sh — issuer, validity, SANs per host
+
+**Continuous attack-surface monitoring**
+- Every scheduled scan diffs the surface against the last and records each change
+- Tracks new, removed, and reappeared subdomains; live/offline, IP, tech, and port shifts; and newly-issued certificates
+- A **Changes** activity feed plus automatic alerts on significant changes
+- Disappeared hosts are flagged (kept for history), never silently dropped
 
 **Dashboard**
 - Redesigned React UI — dark sidebar app shell, light/dark theme toggle, and a global search
 - Overview: domain / subdomain / open-issue / high-risk stat cards, a 14-day findings timeline, a risk-distribution donut, and panels for the latest vulnerabilities and recent alerts
 - Domains: searchable, sortable list with a per-domain risk roll-up; add or remove domains and drill into any one
-- Domain detail: discovered subdomains with DNS records, source attribution, live/orphan status, and on-demand rescan
+- Domain detail: discovered subdomains with DNS records, source attribution, live/orphan/gone status, sort + filter, and on-demand rescan — every row is clickable
+- Subdomain detail: a per-host page with DNS records, fingerprint, open ports, vulnerabilities, certificates, and a change timeline; rescan or refresh certs on demand
+- Assets: one clickable, sortable/filterable view of every subdomain across all domains (including gone hosts)
+- Changes: the attack-surface activity feed — new/removed hosts, status/IP/tech/port shifts, new certificates — sortable and filterable
 - Vulnerabilities: search, type/status filters, confidence scoring, and one-click false-positive flagging
+- Sort and filter on every list view
 - Settings: one tabbed page for your profile & password, discovery-source API keys, Slack notifications, and scan preferences
 - Live scan-status indicator in the sidebar while a discovery is running
 

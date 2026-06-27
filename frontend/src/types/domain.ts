@@ -27,6 +27,7 @@ export interface Subdomain {
   cname_record: string | null
   source: string
   status: SubdomainStatus
+  gone: boolean
   // Backend vuln_type is an open set (takeover types or "cve:CVE-…"); keep it
   // a string so live findings flow through, and let vulnTypeMeta interpret it.
   vuln_type: string | null

@@ -10,6 +10,8 @@ import PublicOutlined from '@mui/icons-material/PublicOutlined'
 import GppMaybeOutlined from '@mui/icons-material/GppMaybeOutlined'
 import NotificationsNoneOutlined from '@mui/icons-material/NotificationsNoneOutlined'
 import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined'
+import DnsOutlined from '@mui/icons-material/DnsOutlined'
+import TimelineOutlined from '@mui/icons-material/TimelineOutlined'
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
 import ShieldOutlined from '@mui/icons-material/ShieldOutlined'
 import RadarOutlined from '@mui/icons-material/RadarOutlined'
@@ -28,6 +30,8 @@ const DRAWER_WIDTH = 236
 const NAV = [
   { label: 'Dashboard', path: '/dashboard', icon: <SpaceDashboardOutlined /> },
   { label: 'Domains', path: '/domains', icon: <PublicOutlined /> },
+  { label: 'Assets', path: '/assets', icon: <DnsOutlined /> },
+  { label: 'Changes', path: '/changes', icon: <TimelineOutlined /> },
   { label: 'Vulnerabilities', path: '/vulnerabilities', icon: <GppMaybeOutlined /> },
   { label: 'Alerts', path: '/alerts', icon: <NotificationsNoneOutlined /> },
   { label: 'Audit logs', path: '/audit-logs', icon: <ReceiptLongOutlined /> },
@@ -48,9 +52,12 @@ export function AppLayout() {
   const sb = theme.palette.sidebar
 
   const isActive = (path: string) =>
-    location.pathname === path || (path === '/domains' && location.pathname.startsWith('/domains/'))
+    location.pathname === path ||
+    (path === '/domains' && location.pathname.startsWith('/domains/')) ||
+    (path === '/assets' && location.pathname.startsWith('/subdomains/'))
   const title = TITLES[location.pathname] ||
-    (location.pathname.startsWith('/domains/') ? 'Domain detail' : 'Körüg')
+    (location.pathname.startsWith('/domains/') ? 'Domain detail' :
+      location.pathname.startsWith('/subdomains/') ? 'Subdomain detail' : 'Körüg')
 
   const refreshAlerts = useCallback(async () => {
     try { setActiveAlerts((await alertAPI.getStats()).active) } catch { /* best-effort */ }

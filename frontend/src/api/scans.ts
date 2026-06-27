@@ -16,6 +16,7 @@ export interface EnrichedSubdomain {
   technologies: string[]
   open_ports: OpenPort[]
   is_cloudflare: boolean
+  is_gone: boolean
   first_discovered: string | null
 }
 
@@ -69,7 +70,43 @@ export interface Asset extends EnrichedSubdomain {
   domain_name: string
   dns_records: DnsRecords
   resolves: boolean
+  is_gone: boolean
   last_seen: string | null
+}
+
+export interface Certificate {
+  id: number
+  subdomain_id: number
+  domain_id: number
+  issuer: string | null
+  common_name: string | null
+  sans: string[]
+  serial_number: string | null
+  not_before: string | null
+  not_after: string | null
+  source: string | null
+  first_seen: string | null
+  last_seen: string | null
+}
+
+export interface AssetChange {
+  id: number
+  domain_id: number
+  domain_name?: string | null
+  subdomain_id: number | null
+  scan_id: number | null
+  change_type: string
+  target: string | null
+  old_value: string | null
+  new_value: string | null
+  detected_at: string | null
+}
+
+export interface SubdomainDetail {
+  asset: Asset & { gone_at: string | null }
+  vulnerabilities: ScanVulnerability[]
+  certificates: Certificate[]
+  changes: AssetChange[]
 }
 
 export interface AssetList {
@@ -134,11 +171,24 @@ export const scanAPI = {
     return response.data
   },
 
+  getSubdomainDetail: async (subdomain_id: number): Promise<SubdomainDetail> => {
+    const response = await client.get<SubdomainDetail>(`/api/scans/subdomain/${subdomain_id}`)
+    return response.data
+  },
+
+  refreshCertificates: async (subdomain_id: number): Promise<{ new_certificates: number; certificates: Certificate[] }> => {
+    const response = await client.post(`/api/scans/subdomain/${subdomain_id}/certificates/refresh`)
+    return response.data
+  },
+
   listAssets: async (params: {
     domain_id?: number
     q?: string
     alive?: boolean
     resolved?: boolean
+    gone?: boolean
+    sort?: string
+    dir?: 'asc' | 'desc'
     skip?: number
     limit?: number
   } = {}): Promise<AssetList> => {
