@@ -116,7 +116,7 @@ export interface AssetList {
 }
 
 export interface ScanResults {
-  domain: { id: number; domain_name: string; enabled: boolean; last_scanned: string | null }
+  domain: { id: number; domain_name: string; enabled: boolean; monitor_mode?: 'active' | 'passive'; last_scanned: string | null }
   counts: { subdomains: number; alive: number; vulnerabilities: number; cloudflare: number }
   ip_groups: IpGroup[]
   subdomains: EnrichedSubdomain[]

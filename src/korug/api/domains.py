@@ -80,17 +80,17 @@ def create_domain(
             detail=f"Domain {domain.domain_name} already exists",
         )
     
-    db_domain = Domain(domain_name=domain.domain_name)
+    db_domain = Domain(domain_name=domain.domain_name, monitor_mode=domain.monitor_mode)
     db.add(db_domain)
     db.commit()
     db.refresh(db_domain)
-    
+
     log_audit_event(
         AuditEvent.DOMAIN_CREATED,
         user=current_user['sub'],
         resource_type="domain",
         resource_id=db_domain.id,
-        details={"domain_name": domain.domain_name}
+        details={"domain_name": domain.domain_name, "monitor_mode": domain.monitor_mode}
     )
     logger.info(f"Domain {domain.domain_name} created by {current_user['sub']}")
 

@@ -16,13 +16,17 @@ At-a-glance stat cards — total domains, vulnerabilities, active scans, high-ri
 - **Edit** ✏️ — rename the domain or enable/disable it (disabled domains are skipped by scheduled scans).
 - **Delete** 🗑 — remove the domain and its results.
 
-Add a domain with **Add Domain**.
+Add a domain with **Add Domain**. When adding, pick a **monitoring mode**:
+- **Active** — discovery + DNS plus HTTP probing, technology fingerprinting and CVE checks. Port scans stay manual.
+- **Passive** — low-touch: subdomain discovery, DNS records and DNS-based takeover checks only, with no direct probing of the target.
+
+You can switch a domain between active and passive later from its detail view.
 
 ### Assets
 A single, searchable list of every subdomain discovered across **all** your domains — the full passive footprint, including names that don't currently resolve or have disappeared. Search by name and filter by **Live**, **Resolving**, or **Gone**; sort by host, domain, status, or last-seen. Each row is **clickable** and opens the subdomain detail view.
 
 ### Domain detail
-Summary counts (subdomains / open issues / sources / risk) above a sortable, filterable table of every discovered subdomain — host, DNS records, source, and live/orphan/**gone** status. Search, sort by host or status, filter (All / Live / Issues / Gone), **rescan** the whole domain, and click any row to open its detail. 
+Summary counts (subdomains / open issues / sources / risk) above a sortable, filterable table of every discovered subdomain — host, DNS records, source, and live/orphan/**gone** status. Search, sort by host or status, filter (All / Live / Issues / Gone), toggle **Active/Passive** monitoring, **rescan** the whole domain, and click any row to open its detail. 
 
 ### Subdomain detail
 The per-host page (click any subdomain anywhere in the app). It shows status and key facts, full DNS records, HTTP fingerprint (status, server, technologies), open ports, the host's **vulnerabilities** (with false-positive flagging), its **certificates** from crt.sh (issuer, common name, validity, SANs), and a **change history** timeline. Use **Rescan host** to refresh enrichment + CVE/takeover checks, or **Refresh certs** to re-pull Certificate Transparency data.

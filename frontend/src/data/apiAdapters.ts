@@ -94,6 +94,7 @@ export async function fetchDomains(): Promise<Domain[]> {
       id: d.id,
       domain_name: d.domain_name,
       enabled: d.enabled,
+      monitor_mode: d.monitor_mode ?? 'active',
       last_scanned: timeAgo(d.last_scanned),
       subdomain_count: subs.length,
       open_vulnerabilities: open.length,
@@ -103,8 +104,12 @@ export async function fetchDomains(): Promise<Domain[]> {
   })
 }
 
-export async function createDomain(name: string): Promise<void> {
-  await domainAPI.create(name)
+export async function createDomain(name: string, mode: 'active' | 'passive' = 'active'): Promise<void> {
+  await domainAPI.create(name, mode)
+}
+
+export async function setDomainMonitorMode(id: number, mode: 'active' | 'passive'): Promise<void> {
+  await domainAPI.update(id, { monitor_mode: mode })
 }
 
 export async function deleteDomain(id: number): Promise<void> {
@@ -150,6 +155,7 @@ export async function fetchDomainDetail(id: number): Promise<DomainDetail> {
     id: results.domain.id,
     domain_name: results.domain.domain_name,
     enabled: results.domain.enabled,
+    monitor_mode: results.domain.monitor_mode ?? 'active',
     last_scanned: timeAgo(results.domain.last_scanned),
     subdomain_count: results.counts.subdomains,
     open_vulnerabilities: open.length,

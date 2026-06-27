@@ -32,6 +32,9 @@ class Domain(Base):
     id = Column(Integer, primary_key=True, index=True)
     domain_name = Column(String(255), unique=True, nullable=False, index=True)
     enabled = Column(Boolean, default=True)
+    # Monitoring depth: "active" does HTTP probing + fingerprint/CVE enrichment;
+    # "passive" is low-touch (discovery + DNS + DNS-based takeover only).
+    monitor_mode = Column(String(16), default="active", nullable=False)
     last_scanned = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

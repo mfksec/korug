@@ -239,6 +239,30 @@ def test_list_changes_type_filter(client, db_session):
     assert miss["count"] == 0
 
 
+def test_create_domain_defaults_to_active_mode(client):
+    r = client.post("/api/domains/", json={"domain_name": "active-default.com"})
+    assert r.status_code == 201
+    assert r.json()["monitor_mode"] == "active"
+
+
+def test_create_domain_with_passive_mode(client):
+    r = client.post("/api/domains/", json={"domain_name": "passive.com", "monitor_mode": "passive"})
+    assert r.status_code == 201
+    assert r.json()["monitor_mode"] == "passive"
+
+
+def test_create_domain_rejects_invalid_mode(client):
+    r = client.post("/api/domains/", json={"domain_name": "bad.com", "monitor_mode": "aggressive"})
+    assert r.status_code == 422
+
+
+def test_update_domain_monitor_mode(client):
+    domain_id = client.post("/api/domains/", json={"domain_name": "switch.com"}).json()["id"]
+    r = client.put(f"/api/domains/{domain_id}", json={"monitor_mode": "passive"})
+    assert r.status_code == 200
+    assert r.json()["monitor_mode"] == "passive"
+
+
 @pytest.mark.asyncio
 async def test_incremental_enrichment_isolates_failures(db_session, monkeypatch):
     """A rate-limit/error during CVE or cert lookup must not break the scan.

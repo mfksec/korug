@@ -55,6 +55,7 @@ trigger (dashboard / CLI / API / scheduler)
   → discovery: aggregate names from all configured sources (concurrent)
   → enrichment: resolve DNS → group by IP → HTTP(S) probe → tech + Cloudflare
                 → optional port scan
+     (passive monitor_mode skips the HTTP probe + ports → DNS-only, low-touch)
   → upsert ALL discovered subdomains with their enrichment
   → diff each host vs its prior state → record AssetChange + alerts
   → takeover detection per subdomain

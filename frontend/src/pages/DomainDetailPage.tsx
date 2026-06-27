@@ -11,7 +11,7 @@ import RefreshOutlined from '@mui/icons-material/RefreshOutlined'
 import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
 import { FONT_MONO } from '@/styles/theme'
 import { SearchField, Segmented, RiskChip, TintChip, riskMeta, subStatusMeta } from '@/components/common/Widgets'
-import { fetchDomainDetail, rescanDomain, type DomainDetail } from '@/data/apiAdapters'
+import { fetchDomainDetail, rescanDomain, setDomainMonitorMode, type DomainDetail } from '@/data/apiAdapters'
 import { apiErrorMessage } from '@/utils/apiError'
 
 export function DomainDetailPage() {
@@ -68,6 +68,17 @@ export function DomainDetailPage() {
     }
   }
 
+  const changeMode = async (mode: 'active' | 'passive') => {
+    if (!detail || detail.domain.monitor_mode === mode) return
+    try {
+      await setDomainMonitorMode(domainId, mode)
+      setToast(`Monitoring set to ${mode}`)
+      await load()
+    } catch (err) {
+      setToast(apiErrorMessage(err, 'Failed to update monitoring mode'))
+    }
+  }
+
   if (!domain) {
     return (
       <Box>
@@ -102,7 +113,8 @@ export function DomainDetailPage() {
             <Typography sx={{ fontSize: 13, color: 'text.disabled', mt: 0.4 }}>Last scanned {domain.last_scanned} · monitoring {domain.enabled ? 'enabled' : 'paused'}</Typography>
           </Box>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1.2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap' }}>
+          <Segmented value={domain.monitor_mode} onChange={changeMode} options={[{ value: 'active', label: 'Active' }, { value: 'passive', label: 'Passive' }]} />
           <Button variant="outlined" color="inherit" startIcon={<FileDownloadOutlined />} sx={{ borderColor: 'divider', color: 'text.secondary' }}>Export XLSX</Button>
           <Button variant="contained" color="primary" startIcon={<RefreshOutlined />} onClick={rescan}>Rescan</Button>
         </Box>

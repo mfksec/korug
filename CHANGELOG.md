@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Active/passive monitoring mode per domain**: choose how deeply Körüg monitors a
+  domain — **active** (discovery + DNS + HTTP probing + tech fingerprint + CVE +
+  certificate checks) or **passive** (low-touch: discovery + DNS + DNS-based takeover
+  only, no direct probing of the target). Selectable when adding a domain and editable
+  from the domain detail view (`Domain.monitor_mode`; default `active`). Port scans
+  remain manual in both modes.
 - **Precise subdomain-takeover detection** (`can-i-take-over-xyz` style): a new
   `subdomain_takeover` finding fires when a CNAME points at a known service
   (GitHub Pages, Heroku, Shopify, Fastly, Ghost, Bitbucket, and ~25 more) **and**
