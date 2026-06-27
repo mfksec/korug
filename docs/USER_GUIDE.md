@@ -16,13 +16,17 @@ At-a-glance stat cards — total domains, vulnerabilities, active scans, high-ri
 - **Edit** ✏️ — rename the domain or enable/disable it (disabled domains are skipped by scheduled scans).
 - **Delete** 🗑 — remove the domain and its results.
 
-Add a domain with **Add Domain**.
+Add a domain with **Add Domain**. When adding, pick a **monitoring mode**:
+- **Active** — discovery + DNS plus HTTP probing, technology fingerprinting and CVE checks. Port scans stay manual.
+- **Passive** — low-touch: subdomain discovery, DNS records and DNS-based takeover checks only, with no direct probing of the target.
+
+You can switch a domain between active and passive later from its detail view.
 
 ### Assets
 A single, searchable list of every subdomain discovered across **all** your domains — the full passive footprint, including names that don't currently resolve or have disappeared. Search by name and filter by **Live**, **Resolving**, or **Gone**; sort by host, domain, status, or last-seen. Each row is **clickable** and opens the subdomain detail view.
 
 ### Domain detail
-Summary counts (subdomains / open issues / sources / risk) above a sortable, filterable table of every discovered subdomain — host, DNS records, source, and live/orphan/**gone** status. Search, sort by host or status, filter (All / Live / Issues / Gone), **rescan** the whole domain, and click any row to open its detail. 
+Summary counts (subdomains / open issues / sources / risk) above a sortable, filterable table of every discovered subdomain — host, DNS records, source, and live/orphan/**gone** status. Search, sort by host or status, filter (All / Live / Issues / Gone), toggle **Active/Passive** monitoring, **rescan** the whole domain, and click any row to open its detail. 
 
 ### Subdomain detail
 The per-host page (click any subdomain anywhere in the app). It shows status and key facts, full DNS records, HTTP fingerprint (status, server, technologies), open ports, the host's **vulnerabilities** (with false-positive flagging), its **certificates** from crt.sh (issuer, common name, validity, SANs), and a **change history** timeline. Use **Rescan host** to refresh enrichment + CVE/takeover checks, or **Refresh certs** to re-pull Certificate Transparency data.
@@ -65,8 +69,9 @@ CVE and certificate steps run automatically only for new/changed live hosts (to 
 
 | Type | Typical confidence | Meaning |
 |------|--------------------|---------|
-| S3 bucket takeover | ~95% | CNAME points to an unclaimed S3 bucket |
-| CNAME orphan | ~85% | CNAME target doesn't resolve |
+| Subdomain takeover | 95% (70% edge) | CNAME points at a known service (GitHub Pages, Heroku, Shopify, Fastly, Ghost, …) **and** the target is dangling (NXDOMAIN) or its page matches the service's "unclaimed" fingerprint. Precise — needs both a CNAME match and a dangling/fingerprint signal |
+| S3 bucket takeover | ~95% | CNAME points to an unclaimed S3 bucket (authoritative bucket-existence check) |
+| CNAME orphan | ~85% | CNAME target doesn't resolve (generic; only when no specific service matched) |
 | Orphaned NS record | ~85% | NS target doesn't exist |
 | Orphaned MX record | ~80% | MX target doesn't exist |
 | CVE (`cve:CVE-…`) | from CVSS | NVD keyword match on a host's fingerprinted product + version (best-effort; verify before acting) |

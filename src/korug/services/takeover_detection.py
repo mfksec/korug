@@ -7,6 +7,7 @@ import dns.exception
 import boto3
 
 from korug.config import get_settings
+from korug.services.takeover_fingerprints import match_cname, body_indicates_takeover
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -26,32 +27,114 @@ class TakeoverDetector:
         except Exception as e:
             logger.warning(f"Could not initialize S3 client: {e}")
 
-    async def check_takeover_risks(self, subdomain: str, dns_records: dict) -> List[Dict]:
+    async def check_takeover_risks(
+        self,
+        subdomain: str,
+        dns_records: dict,
+        http_body: Optional[str] = None,
+        status_code: Optional[int] = None,
+    ) -> List[Dict]:
         """
         Check for subdomain takeover vulnerabilities.
-        
+
         Args:
             subdomain: The subdomain to check
             dns_records: Dictionary containing DNS records (A, AAAA, CNAME, MX, NS)
-            
+            http_body: HTTP response body captured during enrichment, used for
+                precise service-fingerprint matching (optional — without it the
+                service check still flags NXDOMAIN-on-known-service candidates).
+            status_code: HTTP status from the probe (informational).
+
         Returns:
             List of vulnerability findings with confidence scores
         """
         vulnerabilities = []
-        
-        # Check for S3 bucket takeover
+
+        # 1. Precise service takeover: CNAME points at a known service AND the
+        #    target is unresolvable (NXDOMAIN) or its body matches the service's
+        #    "unclaimed" fingerprint. Highest-signal check.
+        service_findings = await self._check_service_takeover(subdomain, dns_records, http_body)
+        vulnerabilities.extend(service_findings)
+
+        # 2. S3 bucket takeover (authoritative bucket-existence check via boto3).
         s3_findings = await self._check_s3_takeover(subdomain, dns_records)
         vulnerabilities.extend(s3_findings)
-        
-        # Check for CNAME orphan
-        cname_findings = await self._check_cname_orphan(subdomain, dns_records)
-        vulnerabilities.extend(cname_findings)
-        
-        # Check for orphaned DNS records
+
+        # 3. Generic dangling CNAME — only when the precise service check didn't
+        #    already own this host, to avoid double-reporting.
+        if not service_findings:
+            cname_findings = await self._check_cname_orphan(subdomain, dns_records)
+            vulnerabilities.extend(cname_findings)
+
+        # 4. Orphaned MX/NS records.
         orphan_findings = await self._check_orphaned_records(subdomain, dns_records)
         vulnerabilities.extend(orphan_findings)
-        
+
         return vulnerabilities
+
+    def _is_unresolvable(self, name: str) -> bool:
+        """True if ``name`` does not resolve (NXDOMAIN / no answer) — a dangling target."""
+        try:
+            ans = dns.resolver.resolve(name, "A", raise_on_no_answer=False)
+            return ans.rrset is None
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.exception.DNSException):
+            return True
+        except Exception as e:  # pragma: no cover - resolver edge cases
+            logger.debug("Resolve check failed for %s: %s", name, e)
+            return False
+
+    async def _check_service_takeover(
+        self, subdomain: str, dns_records: dict, http_body: Optional[str]
+    ) -> List[Dict]:
+        """Precise takeover detection: CNAME pattern + (NXDOMAIN or body fingerprint).
+
+        Pipeline: CNAME chain → does the target match a known service? → is the
+        target dangling (NXDOMAIN) or does the response body match the service's
+        fingerprint? Either signal on a known service is a takeover candidate.
+        """
+        cname = dns_records.get("CNAME")
+        if not cname:
+            return []
+
+        candidates = match_cname(cname)
+        if not candidates:
+            return []
+
+        # A dangling CNAME (target no longer resolves) is a strong, body-independent
+        # signal — exactly the high-priority case from the takeover pipeline.
+        nxdomain = self._is_unresolvable(cname)
+
+        findings: List[Dict] = []
+        for entry in candidates:
+            body_hit = body_indicates_takeover(entry, http_body or "")
+            if not (nxdomain or body_hit):
+                continue
+
+            vulnerable = entry.get("vulnerable", True)
+            # NXDOMAIN on a known service, or a confirmed-vulnerable fingerprint
+            # match, is critical; an edge-case service matched only by body is
+            # "verify manually".
+            confidence = 95.0 if (nxdomain or vulnerable is True) else 70.0
+            signal = "dangling DNS (NXDOMAIN)" if nxdomain else "response fingerprint"
+
+            findings.append({
+                "vuln_type": "subdomain_takeover",
+                "confidence_score": confidence,
+                "details": json.dumps({
+                    "category": "takeover",
+                    "service": entry["service"],
+                    "cname": cname,
+                    "signal": signal,
+                    "nxdomain": nxdomain,
+                    "fingerprint_matched": body_hit,
+                    "vulnerable": vulnerable,
+                    "message": f"Dangling DNS → possible takeover via {entry['service']} "
+                               f"({cname}) — {signal}",
+                }),
+            })
+            logger.warning("Possible %s takeover for %s via %s (%s)",
+                           entry["service"], subdomain, cname, signal)
+        return findings
 
     async def _check_s3_takeover(self, subdomain: str, dns_records: dict) -> List[Dict]:
         """

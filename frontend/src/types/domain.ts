@@ -8,10 +8,13 @@ export type VulnStatus = 'open' | 'false_positive'
 export type SubdomainStatus = 'live' | 'orphan' | 'dns_orphan'
 export type AlertSeverity = 'high' | 'medium' | 'info'
 
+export type MonitorMode = 'active' | 'passive'
+
 export interface Domain {
   id: number
   domain_name: string
   enabled: boolean
+  monitor_mode: MonitorMode
   last_scanned: string | null
   subdomain_count: number
   open_vulnerabilities: number

@@ -26,7 +26,7 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 - HTTP(S) probing with smart https→http fallback: status code, final URL, title, content-length, server
 - Technology fingerprinting and Cloudflare detection
 - Optional port scan (nmap with service/version when available, else built-in TCP scan)
-- Subdomain takeover detection — unclaimed S3 buckets, orphaned CNAME / MX / NS — with per-finding confidence scoring
+- Precise subdomain takeover detection — CNAME-to-known-service (GitHub Pages, Heroku, Shopify, Fastly, … ~30 services) confirmed by a dangling-DNS (NXDOMAIN) or HTTP-body fingerprint signal, plus unclaimed S3 buckets and orphaned CNAME / MX / NS — with per-finding confidence scoring
 - Automatic CVE lookup (NVD) for new/changed live hosts, using fingerprinted product+version
 - Certificate Transparency monitoring via crt.sh — issuer, validity, SANs per host
 
@@ -81,6 +81,17 @@ Dashboard: http://localhost:3000 | API docs: http://localhost:8000/docs
 On first run an initial `admin` account is created. If `ADMIN_PASSWORD` is not set, a strong random password is generated and printed to the logs once — capture it and change it after logging in.
 
 > Configure secrets via environment variables, never in committed files. See [.env.example](.env.example) for all options. Slack notifications are configured at runtime from the dashboard's **Settings → Integrations** tab.
+
+# Acknowledgements
+
+Körüg builds on the work of the open-source security community. Thanks to:
+
+- **[can-i-take-over-xyz](https://github.com/EdOverflow/can-i-take-over-xyz)** by EdOverflow and contributors — the source of the subdomain-takeover service CNAME patterns and fingerprints used in [`takeover_fingerprints.py`](src/korug/services/takeover_fingerprints.py). Licensed **CC BY-SA 4.0**; our curated subset is a derivative work shared under the same terms.
+- **Discovery & recon tooling/data**: [ProjectDiscovery](https://github.com/projectdiscovery) (subfinder), [OWASP Amass](https://github.com/owasp-amass/amass), [crt.sh](https://crt.sh) and CertSpotter (Certificate Transparency), HackerTarget, RapidDNS, AlienVault OTX, ThreatMiner, the Wayback Machine, and the optional providers VirusTotal, SecurityTrails, BinaryEdge, Censys, urlscan.io, and Shodan.
+- **Vulnerability data**: the [NVD](https://nvd.nist.gov/) CVE feed (NIST).
+- **Core libraries**: FastAPI, SQLAlchemy, dnspython, aiohttp, boto3, nmap + defusedxml, APScheduler, React, Vite, MUI, and Recharts.
+
+Trademarks and project names belong to their respective owners; listing here does not imply endorsement.
 
 # Documentation
 

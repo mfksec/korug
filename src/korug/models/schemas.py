@@ -90,17 +90,20 @@ class IntegrationTestRequest(BaseModel):
 # Domain Schemas
 class DomainCreate(BaseModel):
     domain_name: str = Field(..., min_length=1, max_length=255)
+    monitor_mode: str = Field(default="active", pattern="^(active|passive)$")
 
 
 class DomainUpdate(BaseModel):
     domain_name: Optional[str] = None
     enabled: Optional[bool] = None
+    monitor_mode: Optional[str] = Field(default=None, pattern="^(active|passive)$")
 
 
 class DomainResponse(BaseModel):
     id: int
     domain_name: str
     enabled: bool
+    monitor_mode: str = "active"
     last_scanned: Optional[datetime]
     created_at: datetime
     updated_at: datetime

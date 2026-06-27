@@ -24,8 +24,8 @@ export const domainAPI = {
     return response.data
   },
 
-  create: async (domain_name: string) => {
-    const response = await client.post<Domain>('/api/domains/', { domain_name })
+  create: async (domain_name: string, monitor_mode: 'active' | 'passive' = 'active') => {
+    const response = await client.post<Domain>('/api/domains/', { domain_name, monitor_mode })
     return response.data
   },
 

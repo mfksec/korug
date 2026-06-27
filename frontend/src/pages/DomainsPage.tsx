@@ -28,6 +28,7 @@ export function DomainsPage() {
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
   const [addOpen, setAddOpen] = useState(false)
   const [addValue, setAddValue] = useState('')
+  const [addMode, setAddMode] = useState<'active' | 'passive'>('active')
   const [toast, setToast] = useState('')
 
   const load = useCallback(async () => {
@@ -64,8 +65,9 @@ export function DomainsPage() {
     const name = addValue.trim()
     if (!name) return
     try {
-      await createDomain(name)
-      setAddOpen(false); setAddValue(''); setToast(`Added ${name} — discovery started`)
+      await createDomain(name, addMode)
+      setAddOpen(false); setAddValue(''); setAddMode('active')
+      setToast(`Added ${name} — ${addMode} discovery started`)
       load()
     } catch (err) {
       setToast(apiErrorMessage(err, 'Failed to add domain'))
@@ -120,7 +122,7 @@ export function DomainsPage() {
                       <Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: d.enabled ? 'success.main' : 'text.disabled' }} />
                       <Box>
                         <Typography sx={{ fontFamily: FONT_MONO, fontWeight: 500, fontSize: 14 }}>{d.domain_name}</Typography>
-                        <Typography sx={{ fontSize: 11.5, color: 'text.disabled' }}>{d.source_count} sources · {d.enabled ? 'Active' : 'Paused'}</Typography>
+                        <Typography sx={{ fontSize: 11.5, color: 'text.disabled' }}>{d.source_count} sources · {d.monitor_mode === 'passive' ? 'Passive' : 'Active'} · {d.enabled ? 'On' : 'Paused'}</Typography>
                       </Box>
                     </Box>
                   </TableCell>
@@ -151,7 +153,15 @@ export function DomainsPage() {
             autoFocus fullWidth value={addValue} onChange={(e) => setAddValue(e.target.value)} placeholder="example.com"
             InputProps={{ startAdornment: <InputAdornment position="start"><PublicOutlined sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment>, sx: { fontFamily: FONT_MONO } }}
           />
-          <Typography sx={{ fontSize: 12, color: 'text.disabled', mt: 1 }}>Tip: paste multiple domains separated by commas to add in bulk.</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'text.secondary' }}>Monitoring</Typography>
+            <Segmented value={addMode} onChange={setAddMode} options={[{ value: 'active', label: 'Active' }, { value: 'passive', label: 'Passive' }]} />
+          </Box>
+          <Typography sx={{ fontSize: 12, color: 'text.disabled', mt: 1 }}>
+            {addMode === 'active'
+              ? 'Active: discovery + DNS, plus HTTP probing, tech fingerprinting and CVE checks. Port scans stay manual.'
+              : 'Passive: low-touch — subdomain discovery, DNS records and DNS-based takeover checks only (no direct probing of the target).'}
+          </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button onClick={() => setAddOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button>

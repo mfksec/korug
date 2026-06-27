@@ -1,4 +1,6 @@
 """Tests for the enrichment service (pure, deterministic helpers)."""
+from unittest.mock import patch, AsyncMock
+
 import pytest
 
 from korug.services.enrichment import (
@@ -8,6 +10,30 @@ from korug.services.enrichment import (
     EnrichResult,
     EnrichmentService,
 )
+
+
+_RESOLVED = {"A": ["1.2.3.4"], "AAAA": [], "CNAME": None, "MX": [], "NS": []}
+
+
+@pytest.mark.asyncio
+async def test_enrich_one_skips_http_probe_in_passive_mode():
+    """Passive monitoring (do_probe=False) must resolve DNS but never probe the host."""
+    svc = EnrichmentService()
+    with patch.object(svc, "_resolve", return_value=dict(_RESOLVED)), \
+         patch.object(svc, "_probe", new=AsyncMock()) as probe:
+        res = await svc._enrich_one(session=None, name="x.example.com", do_ports=False, do_probe=False)
+    probe.assert_not_called()
+    assert res.resolved_ips == ["1.2.3.4"]
+    assert res.is_alive is False
+
+
+@pytest.mark.asyncio
+async def test_enrich_one_probes_in_active_mode():
+    svc = EnrichmentService()
+    with patch.object(svc, "_resolve", return_value=dict(_RESOLVED)), \
+         patch.object(svc, "_probe", new=AsyncMock()) as probe:
+        await svc._enrich_one(session=None, name="x.example.com", do_ports=False, do_probe=True)
+    probe.assert_called_once()
 
 
 NMAP_XML = """<?xml version="1.0"?>

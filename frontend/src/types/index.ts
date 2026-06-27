@@ -33,6 +33,7 @@ export interface Domain {
   id: number
   domain_name: string
   enabled: boolean
+  monitor_mode: 'active' | 'passive'
   last_scanned: string | null
   created_at: string
   updated_at: string

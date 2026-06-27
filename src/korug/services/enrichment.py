@@ -110,6 +110,9 @@ class EnrichResult:
     technologies: List[str] = field(default_factory=list)
     open_ports: List[dict] = field(default_factory=list)  # [{port, service?, product?, version?}]
     is_cloudflare: bool = False
+    # Truncated HTTP body, kept for precise subdomain-takeover fingerprinting
+    # (service "unclaimed" pages are small, so a bounded prefix is enough).
+    http_body: Optional[str] = None
 
     def resolved(self) -> bool:
         r = self.dns_records
@@ -129,14 +132,19 @@ class EnrichmentService:
         names: List[str],
         port_scan: Optional[bool] = None,
         should_cancel: Optional[Callable[[], bool]] = None,
+        http_probe: Optional[bool] = None,
     ) -> Dict[str, EnrichResult]:
         """Enrich names. ``port_scan`` overrides the configured default when set.
+
+        ``http_probe`` overrides whether HTTP(S) probing runs (passive scans pass
+        False to stay low-touch: DNS only, no direct contact with the target).
 
         ``should_cancel`` is checked between batches so a long enrichment run can
         be stopped promptly; when it returns True we return whatever finished so
         far instead of processing the remaining names.
         """
         do_ports = settings.enable_port_scan if port_scan is None else port_scan
+        do_probe = settings.enable_http_probe if http_probe is None else http_probe
         sem = asyncio.Semaphore(self.concurrency)
         timeout = aiohttp.ClientTimeout(total=self.http_timeout)
         connector = aiohttp.TCPConnector(ssl=False, limit=self.concurrency)
@@ -150,7 +158,7 @@ class EnrichmentService:
                 async with sem:
                     # Results are written as each name finishes so partial work
                     # is preserved and in-flight tasks can be cancelled promptly.
-                    results[name] = await self._enrich_one(session, name, do_ports)
+                    results[name] = await self._enrich_one(session, name, do_ports, do_probe)
 
             cancelled = False
             for start in range(0, len(names), batch_size):
@@ -176,7 +184,7 @@ class EnrichmentService:
                             len(results), len(names))
         return results
 
-    async def _enrich_one(self, session, name: str, do_ports: bool) -> EnrichResult:
+    async def _enrich_one(self, session, name: str, do_ports: bool, do_probe: bool = True) -> EnrichResult:
         result = EnrichResult()
         result.dns_records = await asyncio.to_thread(self._resolve, name)
         result.resolved_ips = list(result.dns_records["A"])
@@ -185,7 +193,7 @@ class EnrichmentService:
         if not result.resolved():
             return result
 
-        if settings.enable_http_probe:
+        if do_probe:
             await self._probe(session, name, result)
 
         if do_ports and result.resolved_ips:
@@ -232,6 +240,8 @@ class EnrichmentService:
                     if m:
                         result.http_title = re.sub(r"\s+", " ", m.group(1)).strip()[:500]
                     result.technologies = detect_technologies(dict(resp.headers), body)
+                    # Keep a bounded copy of the body for takeover fingerprinting.
+                    result.http_body = body[:50000]
                     return  # success on this scheme; don't try the next
             except Exception:
                 continue  # try next scheme (smart https->http fallback)
