@@ -28,6 +28,7 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 - Optional port scan (nmap with service/version when available, else built-in TCP scan)
 - Precise subdomain takeover detection — CNAME-to-known-service (GitHub Pages, Heroku, Shopify, Fastly, … ~30 services) confirmed by a dangling-DNS (NXDOMAIN) or HTTP-body fingerprint signal, plus unclaimed S3 buckets and orphaned CNAME / MX / NS — with per-finding confidence scoring
 - Automatic CVE lookup (NVD) for new/changed live hosts, using fingerprinted product+version
+- Optional active scanning with **nuclei** (takeover / CVE / exposure / misconfiguration / default-login templates) for domains in active monitoring mode
 - Certificate Transparency monitoring via crt.sh — issuer, validity, SANs per host
 
 **Continuous attack-surface monitoring**
@@ -35,6 +36,7 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 - Tracks new, removed, and reappeared subdomains; live/offline, IP, tech, and port shifts; and newly-issued certificates
 - A **Changes** activity feed plus automatic alerts on significant changes
 - Disappeared hosts are flagged (kept for history), never silently dropped
+- Optional live Certificate Transparency monitoring (**certstream**) — new subdomains of monitored domains surface in near real-time, between scheduled scans
 
 **Dashboard**
 - Redesigned React UI — dark sidebar app shell, light/dark theme toggle, and a global search

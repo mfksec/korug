@@ -22,6 +22,8 @@ The frontend is a single-page React/Vite app (MUI + Recharts). The backend is Fa
 - **enrichment.py** — concurrent DNS resolution, HTTP(S) probing (status/title/server, https→http fallback), technology fingerprinting, Cloudflare IP-range detection, and an optional port scan (nmap with `-sV` when available, else an async TCP connect scan; nmap XML parsed with defusedxml).
 - **takeover_detection.py** — scores takeover risk. The precise check (modelled on `can-i-take-over-xyz`, fingerprints in **takeover_fingerprints.py**) flags a host when its CNAME points at a known service (GitHub Pages, Heroku, Shopify, Fastly, …) **and** the target is dangling (NXDOMAIN) or the HTTP body matches the service's "unclaimed" fingerprint. Plus unclaimed S3 buckets (boto3), generic orphaned CNAME, and orphaned MX/NS (dnspython). Each finding gets a 0–100 confidence.
 - **cve.py** — best-effort CVE lookup against the public NVD API by product+version keyword, with an in-process TTL cache and rate-limit-aware pacing (an NVD key raises the limit).
+- **nuclei.py** — active, template-based scanning via the nuclei CLI (takeover/CVE/exposure/misconfiguration/default-login). Opt-in (`ENABLE_NUCLEI`), active-mode only, run once per scan over the incremental alive host set; best-effort. Findings stored as `nuclei:<template-id>`.
+- **certstream_monitor.py** — opt-in (`ENABLE_CERTSTREAM`) background consumer of a certstream CT feed; new subdomains of monitored domains are recorded as assets + `subdomain_added` changes in near real-time. Self-healing (reconnect with backoff).
 - **certificates.py** — Certificate Transparency lookup via crt.sh (issuer, CN, SANs, serial, validity), de-duplicated by serial, cached in-process.
 - **changes.py** — attack-surface change detection: pure `diff_subdomain()` plus `record_changes()`, which persists `AssetChange` rows and raises `Alert`s for the significant ones.
 - **slack_integration.py** — posts alerts/summaries to a Slack webhook.
@@ -74,12 +76,15 @@ so repeated scans stay fast and within NVD/crt.sh rate limits.
 ## Attack-surface monitoring roadmap
 
 Built: per-host detail views, certificate transparency monitoring, automatic
-incremental vulnerability scanning, and the asset change-log with change alerts.
-Planned next: per-domain scan cadence; routing change-alerts through the existing
+incremental vulnerability scanning, the asset change-log with change alerts,
+per-domain active/passive monitoring mode, active template scanning (nuclei), and
+live CT-log streaming (certstream).
+Planned next: ownership-confidence + scope allowlist gating for the active tools
+(Phase 2); per-domain scan cadence; routing change-alerts through the existing
 Slack/email integrations; exposure-over-time trend dashboards; port/service & tech
-drift views; IP/ASN grouping; CT-log streaming beyond crt.sh; exportable ASM
-reports; finding aging/SLA; and adopting Alembic for real migrations (today new
-columns are added best-effort at startup by `db._add_missing_columns`).
+drift views; IP/ASN grouping; exportable ASM reports; finding aging/SLA; and
+adopting Alembic for real migrations (today new columns are added best-effort at
+startup by `db._add_missing_columns`).
 
 ## Stack
 

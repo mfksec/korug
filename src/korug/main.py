@@ -100,6 +100,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Scheduler start skipped: {e}")
 
+    # Live Certificate Transparency monitoring (opt-in via ENABLE_CERTSTREAM).
+    try:
+        from korug.services.certstream_monitor import start_certstream
+        start_certstream()
+    except Exception as e:
+        logger.error(f"Certstream monitor start skipped: {e}")
+
     yield
 
     # Shutdown
@@ -109,6 +116,12 @@ async def lifespan(app: FastAPI):
         stop_scheduler()
     except Exception as e:
         logger.error(f"Scheduler stop skipped: {e}")
+
+    try:
+        from korug.services.certstream_monitor import stop_certstream
+        await stop_certstream()
+    except Exception as e:
+        logger.error(f"Certstream monitor stop skipped: {e}")
 
 
 def create_app() -> FastAPI:
