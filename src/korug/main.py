@@ -116,7 +116,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Körüg",
         description="A comprehensive subdomain security monitoring tool",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
         debug=app_settings.fastapi_debug,
     )

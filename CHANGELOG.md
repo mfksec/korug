@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-27
+
 ### Added
 - **Active/passive monitoring mode per domain**: choose how deeply Körüg monitors a
   domain — **active** (discovery + DNS + HTTP probing + tech fingerprint + CVE +
