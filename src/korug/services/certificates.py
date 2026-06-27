@@ -59,7 +59,7 @@ def _parse_row(row: dict) -> Optional[dict]:
     }
 
 
-async def fetch_certificates(host: str, timeout_s: int = 30) -> List[dict]:
+async def fetch_certificates(host: str, timeout_s: int = 20) -> List[dict]:
     """Return de-duplicated certificates observed for ``host`` via crt.sh.
 
     De-dup is by serial number (falling back to a CN+validity key when a serial

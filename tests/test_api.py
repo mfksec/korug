@@ -2,6 +2,8 @@
 import json
 from datetime import datetime
 
+import pytest
+
 
 def test_health_check(client):
     """Test health check endpoint."""
@@ -235,6 +237,52 @@ def test_list_changes_type_filter(client, db_session):
     assert hit["count"] == 1
     miss = client.get("/api/changes/", params={"change_type": "went_offline"}).json()
     assert miss["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_incremental_enrichment_isolates_failures(db_session, monkeypatch):
+    """A rate-limit/error during CVE or cert lookup must not break the scan.
+
+    The incremental enrichment helper isolates each host: a raising CVE/cert
+    lookup is logged and skipped, the call returns normally, and the scan and
+    its already-persisted subdomains remain intact.
+    """
+    from types import SimpleNamespace
+    from korug.api import scans
+    from korug.models import Domain, Subdomain, ScanHistory
+
+    domain = Domain(domain_name="example.com")
+    db_session.add(domain)
+    db_session.commit()
+    db_session.refresh(domain)
+    sub = Subdomain(domain_id=domain.id, subdomain="www.example.com", is_alive=True)
+    db_session.add(sub)
+    scan = ScanHistory(domain_id=domain.id, status="running")
+    db_session.add(scan)
+    db_session.commit()
+    db_session.refresh(sub)
+    db_session.refresh(scan)
+
+    # Force both enrichment steps on, then make them blow up as a rate-limit would.
+    monkeypatch.setattr(
+        "korug.config.get_settings",
+        lambda: SimpleNamespace(enable_auto_cve=True, enable_cert_monitoring=True, nvd_api_key=""),
+    )
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("429 rate limited")
+
+    monkeypatch.setattr(scans, "_scan_cves", boom)
+    monkeypatch.setattr(scans, "_scan_certificates", boom)
+
+    # Must not raise despite both steps failing.
+    result = await scans._run_incremental_enrichment(db_session, scan, [sub.id], {sub.subdomain: None})
+    assert result == 0
+
+    # Scan is untouched (still running, not failed) and the subdomain survives.
+    db_session.refresh(scan)
+    assert scan.status == "running"
+    assert db_session.query(Subdomain).count() == 1
 
 
 if __name__ == "__main__":

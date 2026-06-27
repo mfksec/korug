@@ -187,6 +187,57 @@ async def _scan_certificates(db: Session, sub: Subdomain, scan_id: int | None = 
     return new_certs
 
 
+async def _run_incremental_enrichment(db: Session, scan, incremental_ids: list[int], enriched: dict) -> int:
+    """Run CVE lookup + certificate monitoring for new/changed alive hosts.
+
+    Best-effort and fully fault-isolated: each host is processed and committed on
+    its own, so a network error, timeout, or rate-limit on one host (or the whole
+    NVD/crt.sh service) is logged and skipped without failing the scan or losing
+    the other hosts' results. Returns the count of newly-created CVE findings.
+
+    Raises only ``_ScanCancelled`` (when a cancel is requested between hosts).
+    """
+    from korug.config import get_settings
+    cfg = get_settings()
+    if not incremental_ids or not (cfg.enable_auto_cve or cfg.enable_cert_monitoring):
+        return 0
+
+    nvd_key = None
+    try:
+        from korug.api.integrations import get_recon_keys
+        nvd_key = get_recon_keys(db).get("nvd") or cfg.nvd_api_key or None
+    except Exception as e:
+        logger.warning("Could not load recon keys (continuing without): %s", e)
+
+    logger.info("Incremental enrichment: %d host(s) for CVE/cert lookup", len(incremental_ids))
+    new_vulns = 0
+    for sub_id in incremental_ids:
+        if _scan_cancel_requested(db, scan.id):
+            raise _ScanCancelled()
+        try:
+            sub = db.query(Subdomain).filter(Subdomain.id == sub_id).first()
+            if not sub:
+                continue
+            res = enriched.get(sub.subdomain)
+            if cfg.enable_auto_cve:
+                n = await _scan_cves(db, sub, res, nvd_key)
+                db.commit()       # persist this host's findings before moving on
+                new_vulns += n
+            if cfg.enable_cert_monitoring:
+                await _scan_certificates(db, sub, scan_id=scan.id)
+                db.commit()
+        except _ScanCancelled:
+            raise
+        except Exception as e:
+            # Contain any failure (HTTP error, rate-limit, DB issue) to this host.
+            logger.warning("Incremental enrichment failed for subdomain id=%s (skipping): %s", sub_id, e)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+    return new_vulns
+
+
 # Scan lifecycle states. A scan moves running -> completed/failed, or a cancel
 # request flips running -> cancelling, which the background task observes
 # cooperatively and finalizes as cancelled.
@@ -378,48 +429,42 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
 
             db.commit()
 
-            # Incremental enrichment: CVE lookup + certificate monitoring, run
-            # only for the bounded set of new/changed alive hosts. Both are
-            # network-bound and opt-out via settings; failures never fail a scan.
-            from korug.config import get_settings
-            cfg = get_settings()
-            if incremental_ids and (cfg.enable_auto_cve or cfg.enable_cert_monitoring):
-                from korug.api.integrations import get_recon_keys
-                nvd_key = get_recon_keys(db).get("nvd") or cfg.nvd_api_key or None
-                for sub_id in incremental_ids:
-                    if _scan_cancel_requested(db, scan.id):
-                        db.commit()
-                        raise _ScanCancelled()
-                    sub = db.query(Subdomain).filter(Subdomain.id == sub_id).first()
-                    if not sub:
-                        continue
-                    res = enriched.get(sub.subdomain)
-                    if cfg.enable_auto_cve:
-                        vulnerabilities_found += await _scan_cves(db, sub, res, nvd_key)
-                    if cfg.enable_cert_monitoring:
-                        await _scan_certificates(db, sub, scan_id=scan.id)
-                db.commit()
+            # Incremental enrichment: CVE lookup + certificate monitoring for the
+            # bounded set of new/changed alive hosts. This phase is best-effort and
+            # network-bound (NVD + crt.sh, both rate-limited): every host is
+            # isolated and committed independently so a single error, timeout, or
+            # rate-limit can never break the scan or lose other hosts' results.
+            vulnerabilities_found += await _run_incremental_enrichment(
+                db, scan, incremental_ids, enriched
+            )
 
             # Gone-tracking: names present in a prior scan but absent from this
             # one (last_seen older than this scan) are flagged gone + logged once.
-            gone_subs = db.query(Subdomain).filter(
-                Subdomain.domain_id == domain_id,
-                Subdomain.is_gone.is_(False),
-                Subdomain.last_seen < start_time,
-            ).all()
-            for gone in gone_subs:
-                gone.is_gone = True
-                gone.gone_at = datetime.utcnow()
-                db.add(gone)
-                change_service.record_changes(
-                    db, domain_id=domain_id, subdomain_id=gone.id, scan_id=scan.id,
-                    target=gone.subdomain,
-                    changes=[{"change_type": "subdomain_removed",
-                              "old_value": ", ".join(_json_list(gone.resolved_ips)) or None,
-                              "new_value": None}],
-                )
-            if gone_subs:
-                db.commit()
+            # Best-effort: a failure here must not fail an otherwise-good scan.
+            try:
+                gone_subs = db.query(Subdomain).filter(
+                    Subdomain.domain_id == domain_id,
+                    Subdomain.is_gone.is_(False),
+                    Subdomain.last_seen < start_time,
+                ).all()
+                for gone in gone_subs:
+                    gone.is_gone = True
+                    gone.gone_at = datetime.utcnow()
+                    db.add(gone)
+                    change_service.record_changes(
+                        db, domain_id=domain_id, subdomain_id=gone.id, scan_id=scan.id,
+                        target=gone.subdomain,
+                        changes=[{"change_type": "subdomain_removed",
+                                  "old_value": ", ".join(_json_list(gone.resolved_ips)) or None,
+                                  "new_value": None}],
+                    )
+                if gone_subs:
+                    db.commit()
+            except _ScanCancelled:
+                raise
+            except Exception as e:
+                logger.warning("Gone-tracking failed for %s (continuing): %s", domain.domain_name, e)
+                db.rollback()
 
             # Update scan history
             scan.status = "completed"
@@ -719,18 +764,27 @@ async def scan_subdomain(
             message=_alert_message(sub.subdomain, vuln["vuln_type"], vuln["details"]),
         ))
 
+    # Persist the enrichment + takeover findings before the network-bound CVE/cert
+    # work, so a rate-limit or error in that step can never discard them.
+    db.commit()
+
     # CVE lookup + certificate monitoring (best-effort) for this host. Both reuse
-    # the shared helpers so the manual and incremental auto-scan stay in lockstep.
+    # the shared helpers so the manual and incremental auto-scan stay in lockstep,
+    # and both are fully contained: a failure here is logged, not surfaced as a 500.
     from korug.config import get_settings
     cfg = get_settings()
-    if cfg.enable_cve_scan and res:
-        from korug.api.integrations import get_recon_keys
-        nvd_key = get_recon_keys(db).get("nvd") or cfg.nvd_api_key or None
-        new_vulns += await _scan_cves(db, sub, res, nvd_key)
-    if cfg.enable_cert_monitoring:
-        await _scan_certificates(db, sub)
+    try:
+        if cfg.enable_cve_scan and res:
+            from korug.api.integrations import get_recon_keys
+            nvd_key = get_recon_keys(db).get("nvd") or cfg.nvd_api_key or None
+            new_vulns += await _scan_cves(db, sub, res, nvd_key)
+        if cfg.enable_cert_monitoring:
+            await _scan_certificates(db, sub)
+        db.commit()
+    except Exception as e:
+        logger.warning("CVE/cert enrichment failed for %s (returning enrichment only): %s", sub.subdomain, e)
+        db.rollback()
 
-    db.commit()
     db.refresh(sub)
     asset = _serialize_subdomain(sub)
     asset["domain_id"] = sub.domain_id
