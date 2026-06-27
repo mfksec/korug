@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Precise subdomain-takeover detection** (`can-i-take-over-xyz` style): a new
+  `subdomain_takeover` finding fires when a CNAME points at a known service
+  (GitHub Pages, Heroku, Shopify, Fastly, Ghost, Bitbucket, and ~25 more) **and**
+  the target is dangling (NXDOMAIN) or the HTTP body matches the service's
+  "unclaimed" fingerprint. Far fewer false positives than the generic CNAME-orphan
+  check, which now only fires when no specific service matched
+  (`services/takeover_fingerprints.py`).
 - **Subdomain detail view**: every discovered subdomain is now clickable, opening
   a per-host page with DNS records, fingerprint, open ports, vulnerabilities,
   certificates, and a change timeline (`GET /api/scans/subdomain/{id}`).

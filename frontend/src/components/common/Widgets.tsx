@@ -17,6 +17,7 @@ import { RiskLevel, SubdomainStatus, AlertSeverity } from '@/types/domain'
 // known takeover kinds and fall back to a generic CVE/finding presentation.
 export function vulnTypeMeta(type: string) {
   switch (type) {
+    case 'subdomain_takeover': return { label: 'Subdomain takeover', color: 'error' as const, Icon: LinkOutlined }
     case 's3_bucket_takeover': return { label: 'S3 takeover', color: 'error' as const, Icon: Inventory2Outlined }
     case 'cname_orphan': return { label: 'CNAME orphan', color: 'warning' as const, Icon: LinkOutlined }
     case 'dns_orphan': return { label: 'DNS orphan', color: 'info' as const, Icon: DnsOutlined }

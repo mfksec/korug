@@ -65,8 +65,9 @@ CVE and certificate steps run automatically only for new/changed live hosts (to 
 
 | Type | Typical confidence | Meaning |
 |------|--------------------|---------|
-| S3 bucket takeover | ~95% | CNAME points to an unclaimed S3 bucket |
-| CNAME orphan | ~85% | CNAME target doesn't resolve |
+| Subdomain takeover | 95% (70% edge) | CNAME points at a known service (GitHub Pages, Heroku, Shopify, Fastly, Ghost, …) **and** the target is dangling (NXDOMAIN) or its page matches the service's "unclaimed" fingerprint. Precise — needs both a CNAME match and a dangling/fingerprint signal |
+| S3 bucket takeover | ~95% | CNAME points to an unclaimed S3 bucket (authoritative bucket-existence check) |
+| CNAME orphan | ~85% | CNAME target doesn't resolve (generic; only when no specific service matched) |
 | Orphaned NS record | ~85% | NS target doesn't exist |
 | Orphaned MX record | ~80% | MX target doesn't exist |
 | CVE (`cve:CVE-…`) | from CVSS | NVD keyword match on a host's fingerprinted product + version (best-effort; verify before acting) |

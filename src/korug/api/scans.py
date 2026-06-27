@@ -389,9 +389,12 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                 if current_state["is_alive"] and (prior_state is None or was_gone or tech_or_alive_changed):
                     incremental_ids.append(db_subdomain.id)
 
-                # Check for takeover vulnerabilities
+                # Check for takeover vulnerabilities (pass the probed body so the
+                # precise service-fingerprint check can run).
                 vulnerabilities = await takeover_detector.check_takeover_risks(
-                    subdomain, dns_records
+                    subdomain, dns_records,
+                    http_body=(res.http_body if res else None),
+                    status_code=(res.status_code if res else None),
                 )
 
                 for vuln in vulnerabilities:
@@ -737,8 +740,12 @@ async def scan_subdomain(
     db.add(sub)
     db.flush()
 
-    # Takeover detection for this host
-    vulns = await takeover_detector.check_takeover_risks(sub.subdomain, dns_records)
+    # Takeover detection for this host (precise service-fingerprint check uses the body)
+    vulns = await takeover_detector.check_takeover_risks(
+        sub.subdomain, dns_records,
+        http_body=(res.http_body if res else None),
+        status_code=(res.status_code if res else None),
+    )
     new_vulns = 0
     for vuln in vulns:
         existing = db.query(Vulnerability).filter(

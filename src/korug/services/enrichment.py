@@ -110,6 +110,9 @@ class EnrichResult:
     technologies: List[str] = field(default_factory=list)
     open_ports: List[dict] = field(default_factory=list)  # [{port, service?, product?, version?}]
     is_cloudflare: bool = False
+    # Truncated HTTP body, kept for precise subdomain-takeover fingerprinting
+    # (service "unclaimed" pages are small, so a bounded prefix is enough).
+    http_body: Optional[str] = None
 
     def resolved(self) -> bool:
         r = self.dns_records
@@ -232,6 +235,8 @@ class EnrichmentService:
                     if m:
                         result.http_title = re.sub(r"\s+", " ", m.group(1)).strip()[:500]
                     result.technologies = detect_technologies(dict(resp.headers), body)
+                    # Keep a bounded copy of the body for takeover fingerprinting.
+                    result.http_body = body[:50000]
                     return  # success on this scheme; don't try the next
             except Exception:
                 continue  # try next scheme (smart https->http fallback)
