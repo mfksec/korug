@@ -25,6 +25,7 @@ from korug.services import discovery_service, enrichment_service, takeover_detec
 from korug.services import cve as cve_service
 from korug.services import certificates as cert_service
 from korug.services import changes as change_service
+from korug.services import nuclei as nuclei_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -238,6 +239,90 @@ async def _run_incremental_enrichment(db: Session, scan, incremental_ids: list[i
     return new_vulns
 
 
+async def _run_nuclei(db: Session, scan, incremental_ids: list[int], enriched: dict) -> int:
+    """Active template scanning (nuclei) over the incremental alive host set.
+
+    Opt-in (``enable_nuclei``) and caller-gated to active monitor mode. nuclei is
+    run once over the whole batch (it parallelizes internally). Fully fault-isolated:
+    a missing binary, timeout, or any error is logged and yields no findings.
+    Returns the count of newly-created findings.
+    """
+    cfg = get_settings()
+    if not cfg.enable_nuclei or not incremental_ids:
+        return 0
+
+    # Build hostname → subdomain and the target URL list (alive hosts only).
+    host_to_id: dict[str, int] = {}
+    urls: list[str] = []
+    for sub_id in incremental_ids:
+        sub = db.query(Subdomain).filter(Subdomain.id == sub_id).first()
+        if not sub:
+            continue
+        res = enriched.get(sub.subdomain)
+        if not (res and res.is_alive):
+            continue
+        host_to_id[sub.subdomain.lower()] = sub.id
+        urls.append((res.final_url or f"https://{sub.subdomain}"))
+
+    if not urls:
+        return 0
+
+    try:
+        findings = await nuclei_service.scan(urls)
+    except Exception as e:
+        logger.warning("nuclei scan failed (continuing): %s", e)
+        return 0
+
+    new_vulns = 0
+    try:
+        for f in findings:
+            sub_id = host_to_id.get((f.get("host") or "").lower())
+            if not sub_id:
+                continue
+            sub = db.query(Subdomain).filter(Subdomain.id == sub_id).first()
+            if not sub:
+                continue
+            vuln_type = f"nuclei:{f['template_id']}"[:100]
+            existing = db.query(Vulnerability).filter(
+                Vulnerability.subdomain_id == sub.id,
+                Vulnerability.vuln_type == vuln_type,
+            ).first()
+            score = nuclei_service.severity_confidence(f.get("severity"))
+            details = json.dumps({
+                "category": "nuclei",
+                "template_id": f["template_id"],
+                "name": f.get("name"),
+                "severity": f.get("severity"),
+                "matched_at": f.get("matched_at"),
+                "description": f.get("description"),
+                "message": f"{f.get('name')} ({f.get('severity')}) — {f.get('matched_at') or sub.subdomain}",
+            })
+            if existing:
+                existing.confidence_score = score
+                existing.details = details
+                db.add(existing)
+                continue
+            new_vulns += 1
+            db_vuln = Vulnerability(
+                subdomain_id=sub.id, domain_id=sub.domain_id,
+                vuln_type=vuln_type, confidence_score=score, details=details,
+            )
+            db.add(db_vuln)
+            db.flush()
+            if (f.get("severity") or "").lower() in ("high", "critical"):
+                db.add(Alert(
+                    domain_id=sub.domain_id, vulnerability_id=db_vuln.id, target=sub.subdomain,
+                    alert_type="nuclei", severity=f["severity"].lower(),
+                    message=f"{sub.subdomain}: {f.get('name')} ({f.get('severity')})",
+                ))
+        db.commit()
+    except Exception as e:
+        logger.warning("Persisting nuclei findings failed (continuing): %s", e)
+        db.rollback()
+        return 0
+    return new_vulns
+
+
 # Scan lifecycle states. A scan moves running -> completed/failed, or a cancel
 # request flips running -> cancelling, which the background task observes
 # cooperatively and finalizes as cancelled.
@@ -445,6 +530,10 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
             vulnerabilities_found += await _run_incremental_enrichment(
                 db, scan, incremental_ids, enriched
             )
+
+            # Active template scanning (nuclei) — active monitor mode only, opt-in.
+            if not passive:
+                vulnerabilities_found += await _run_nuclei(db, scan, incremental_ids, enriched)
 
             # Gone-tracking: names present in a prior scan but absent from this
             # one (last_seen older than this scan) are flagged gone + logged once.

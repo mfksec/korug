@@ -70,6 +70,23 @@ class Settings(BaseSettings):
     enable_auto_cve: bool = Field(default=True)        # incremental CVE lookup during a domain scan (new/changed alive hosts)
     enable_cert_monitoring: bool = Field(default=True) # fetch+store crt.sh certificates during a scan and alert on new certs
     nvd_api_key: str = Field(default="")               # optional NVD API key (raises CVE lookup rate limit)
+
+    # nuclei (active, template-based scanning). Opt-in: requires the nuclei CLI +
+    # templates, and runs only for domains in "active" monitor mode, over the
+    # incremental (new/changed alive) host set. Intrusive — authorized targets only.
+    enable_nuclei: bool = Field(default=False)
+    nuclei_path: str = Field(default="nuclei")
+    nuclei_tags: str = Field(default="takeover,cve,exposure,misconfiguration,default-login")
+    nuclei_severity: str = Field(default="low,medium,high,critical")  # skip "info" noise by default
+    nuclei_rate_limit: int = Field(default=150)        # requests/sec cap (nuclei -rate-limit)
+    nuclei_timeout: int = Field(default=900)           # overall subprocess timeout (seconds)
+
+    # certstream live Certificate Transparency monitoring. Opt-in background
+    # consumer: new certs for monitored domains surface as discovered assets in
+    # near real-time. The public Calidog server can be flaky; point at a self-host
+    # via CERTSTREAM_URL for reliability.
+    enable_certstream: bool = Field(default=False)
+    certstream_url: str = Field(default="wss://certstream.calidog.io/")
     enable_http_probe: bool = Field(default=True)      # status/title/tech via HTTP(S)
     enable_subfinder: bool = Field(default=True)       # local subfinder CLI (fast, productive)
     enable_amass: bool = Field(default=False)          # local amass CLI (slow; opt-in, best with API keys)

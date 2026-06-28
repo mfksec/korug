@@ -59,9 +59,13 @@ A record of security-relevant actions (logins, domain and user changes, scans, e
 
 Run a scan from the dashboard (**Run scan** ▶), the CLI (`korug scan --domain example.com`), the API (`POST /api/scans/{id}/scan`, add `?port_scan=true` to include a port scan), or the daily schedule (`SCAN_SCHEDULE_HOUR`/`MINUTE`). A running scan can be stopped from its dashboard row (**Stop** ■) or `POST /api/scans/{id}/scan/cancel`; cancellation is cooperative and keeps whatever was already found.
 
-A scan: aggregates subdomains from all configured sources → resolves DNS and groups by IP → probes HTTP(S) (status/title/server, https→http fallback) → fingerprints technologies and flags Cloudflare → optionally port-scans → tests for takeover → diffs each host against its previous state and records changes → for new or changed live hosts, looks up CVEs (NVD) and pulls certificates (crt.sh) → flags any hosts that disappeared → stores results, raises alerts, and sends Slack/email notifications when enabled.
+A scan: aggregates subdomains from all configured sources → resolves DNS and groups by IP → probes HTTP(S) (status/title/server, https→http fallback) → fingerprints technologies and flags Cloudflare → optionally port-scans → tests for takeover → diffs each host against its previous state and records changes → for new or changed live hosts, looks up CVEs (NVD), runs nuclei templates (if enabled), and pulls certificates (crt.sh) → flags any hosts that disappeared → stores results, raises alerts, and sends Slack/email notifications when enabled. (Passive-mode domains stop after DNS + DNS-based takeover.)
 
 CVE and certificate steps run automatically only for new/changed live hosts (to stay within NVD/crt.sh rate limits); a manual **Rescan host** always runs them. Both can be disabled with `ENABLE_AUTO_CVE` / `ENABLE_CERT_MONITORING`.
+
+> **Active scanning (nuclei).** When `ENABLE_NUCLEI=true`, active-mode domains also get template-based checks (takeover, CVEs, exposures, misconfigurations, default logins) over their new/changed live hosts — intrusive, so only enable it for authorized targets. Findings appear like any other vulnerability (typed `nuclei:<template>`).
+
+> **Live CT monitoring (certstream).** When `ENABLE_CERTSTREAM=true`, Körüg watches Certificate Transparency logs and adds brand-new subdomains of your monitored domains as discovered assets in near real-time — they show up on the Assets and Changes pages between scheduled scans.
 
 > **Port scanning is active.** It's off by default and opt-in per scan — only enable it for targets you're authorized to scan.
 
@@ -75,5 +79,6 @@ CVE and certificate steps run automatically only for new/changed live hosts (to 
 | Orphaned NS record | ~85% | NS target doesn't exist |
 | Orphaned MX record | ~80% | MX target doesn't exist |
 | CVE (`cve:CVE-…`) | from CVSS | NVD keyword match on a host's fingerprinted product + version (best-effort; verify before acting) |
+| nuclei (`nuclei:<template>`) | from severity | Active nuclei template match on a live host (opt-in, active mode) — takeover, CVE, exposure, misconfiguration, default login |
 
 Only findings at or above the confidence threshold (default 75) raise alerts. Findings can be flagged as false positives via the API.

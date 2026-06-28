@@ -23,6 +23,7 @@ export function vulnTypeMeta(type: string) {
     case 'dns_orphan': return { label: 'DNS orphan', color: 'info' as const, Icon: DnsOutlined }
     default:
       if (type.startsWith('cve:')) return { label: type.slice(4).toUpperCase(), color: 'error' as const, Icon: GppMaybeOutlined }
+      if (type.startsWith('nuclei:')) return { label: type.slice(7), color: 'warning' as const, Icon: GppMaybeOutlined }
       return { label: type.replace(/_/g, ' '), color: 'info' as const, Icon: GppMaybeOutlined }
   }
 }

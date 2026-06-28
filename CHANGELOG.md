@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-28
+
+### Added
+- **Active template scanning with nuclei** (opt-in, `ENABLE_NUCLEI`): runs
+  ProjectDiscovery's nuclei over the incremental (new/changed alive) host set of
+  **active**-mode domains — takeover, CVE, exposure, misconfiguration and
+  default-login templates. Findings land as `nuclei:<template-id>` vulnerabilities
+  (high/critical also raise alerts). One batch run per scan; fully fault-isolated
+  (missing binary / timeout / error never fails a scan). Configurable tags,
+  severities and rate limit.
+- **Live Certificate Transparency monitoring with certstream** (opt-in,
+  `ENABLE_CERTSTREAM`): a self-healing background consumer that watches CT log
+  issuances and records brand-new subdomains of monitored domains as discovered
+  assets (`sources=certstream`) with a `subdomain_added` change — near real-time
+  surface discovery between scheduled scans. Configurable feed URL.
+
 ## [0.2.0] - 2026-06-27
 
 ### Added
