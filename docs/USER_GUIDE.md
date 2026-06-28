@@ -65,6 +65,8 @@ CVE and certificate steps run automatically only for new/changed live hosts (to 
 
 > **Active scanning (nuclei).** When `ENABLE_NUCLEI=true`, active-mode domains also get template-based checks (takeover, CVEs, exposures, misconfigurations, default logins) over their new/changed live hosts — intrusive, so only enable it for authorized targets. Findings appear like any other vulnerability (typed `nuclei:<template>`).
 
+> **Scope gating ("scope is law").** Each host carries an **ownership-confidence** score (shown on its detail page) from name ownership, your declared owned IP ranges (`SCOPE_CIDRS`), and how it's hosted. With `REQUIRE_SCOPE_FOR_ACTIVE=true` (default), intrusive tools self-limit: nuclei skips hosts whose app is hosted by a third party (e.g. a CNAME to `github.io`), and port scans skip shared CDN IPs and—if you've declared `SCOPE_CIDRS`—only touch IPs you own. Declare your ranges and the scores rise to 100 for fully-owned assets.
+
 > **Live CT monitoring (certstream).** When `ENABLE_CERTSTREAM=true`, Körüg watches Certificate Transparency logs and adds brand-new subdomains of your monitored domains as discovered assets in near real-time — they show up on the Assets and Changes pages between scheduled scans.
 
 > **Port scanning is active.** It's off by default and opt-in per scan — only enable it for targets you're authorized to scan.

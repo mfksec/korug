@@ -24,6 +24,7 @@ The frontend is a single-page React/Vite app (MUI + Recharts). The backend is Fa
 - **cve.py** — best-effort CVE lookup against the public NVD API by product+version keyword, with an in-process TTL cache and rate-limit-aware pacing (an NVD key raises the limit).
 - **nuclei.py** — active, template-based scanning via the nuclei CLI (takeover/CVE/exposure/misconfiguration/default-login). Opt-in (`ENABLE_NUCLEI`), active-mode only, run once per scan over the incremental alive host set; best-effort. Findings stored as `nuclei:<template-id>`.
 - **certstream_monitor.py** — opt-in (`ENABLE_CERTSTREAM`) background consumer of a certstream CT feed; new subdomains of monitored domains are recorded as assets + `subdomain_added` changes in near real-time. Self-healing (reconnect with backoff).
+- **scope.py** — ownership attribution + scope gating ("scope is law"): a per-asset ownership-confidence score (name ownership + declared owned IP ranges + hosting class) and the per-tool authorization decisions. Active tools (nuclei host-level, port scan IP-level) are gated by it when `REQUIRE_SCOPE_FOR_ACTIVE` is set.
 - **certificates.py** — Certificate Transparency lookup via crt.sh (issuer, CN, SANs, serial, validity), de-duplicated by serial, cached in-process.
 - **changes.py** — attack-surface change detection: pure `diff_subdomain()` plus `record_changes()`, which persists `AssetChange` rows and raises `Alert`s for the significant ones.
 - **slack_integration.py** — posts alerts/summaries to a Slack webhook.
@@ -77,14 +78,15 @@ so repeated scans stay fast and within NVD/crt.sh rate limits.
 
 Built: per-host detail views, certificate transparency monitoring, automatic
 incremental vulnerability scanning, the asset change-log with change alerts,
-per-domain active/passive monitoring mode, active template scanning (nuclei), and
-live CT-log streaming (certstream).
-Planned next: ownership-confidence + scope allowlist gating for the active tools
-(Phase 2); per-domain scan cadence; routing change-alerts through the existing
-Slack/email integrations; exposure-over-time trend dashboards; port/service & tech
-drift views; IP/ASN grouping; exportable ASM reports; finding aging/SLA; and
-adopting Alembic for real migrations (today new columns are added best-effort at
-startup by `db._add_missing_columns`).
+per-domain active/passive monitoring mode, active template scanning (nuclei),
+live CT-log streaming (certstream), and ownership-confidence + scope gating for the
+active tools.
+Planned next: business-context tagging + a real risk model (exposure × exploitability
+× business-impact) with threat-intel correlation (Phase 3); remediation loop — Jira/
+PagerDuty routing, ownership, SLA/aging, remediation re-verify (Phase 4); plus TLS
+audit, massdns/masscan, cloud bucket enum, exportable reports, a task queue at scale,
+and Alembic migrations (today new columns are added best-effort at startup by
+`db._add_missing_columns`).
 
 ## Stack
 

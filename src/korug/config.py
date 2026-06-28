@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     # via CERTSTREAM_URL for reliability.
     enable_certstream: bool = Field(default=False)
     certstream_url: str = Field(default="wss://certstream.calidog.io/")
+
+    # Scope / ownership gating for active scanning. "Scope is law": active, intrusive
+    # tools (nuclei, port scan) only run against assets you're authorized to probe.
+    # scope_cidrs declares IP ranges you own (comma-separated CIDRs); names are owned
+    # by virtue of being subdomains of a monitored domain.
+    scope_cidrs: str = Field(default="")
+    require_scope_for_active: bool = Field(default=True)
     enable_http_probe: bool = Field(default=True)      # status/title/tech via HTTP(S)
     enable_subfinder: bool = Field(default=True)       # local subfinder CLI (fast, productive)
     enable_amass: bool = Field(default=False)          # local amass CLI (slow; opt-in, best with API keys)

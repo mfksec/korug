@@ -42,6 +42,21 @@ def is_cloudflare_ip(ip: str) -> bool:
     return any(addr in net for net in _CLOUDFLARE_NETS)
 
 
+def ip_in_cidrs(ip: str, cidrs: List[str]) -> bool:
+    """True if ``ip`` falls within any of the given CIDR ranges (best-effort)."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for c in cidrs or []:
+        try:
+            if addr in ipaddress.ip_network(c.strip(), strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _parse_nmap_xml(xml_str: str) -> List[dict]:
     """Parse nmap -oX output into a list of open-port dicts."""
     ports: List[dict] = []
@@ -133,11 +148,17 @@ class EnrichmentService:
         port_scan: Optional[bool] = None,
         should_cancel: Optional[Callable[[], bool]] = None,
         http_probe: Optional[bool] = None,
+        owned_cidrs: Optional[List[str]] = None,
+        enforce_scope: bool = False,
     ) -> Dict[str, EnrichResult]:
         """Enrich names. ``port_scan`` overrides the configured default when set.
 
         ``http_probe`` overrides whether HTTP(S) probing runs (passive scans pass
         False to stay low-touch: DNS only, no direct contact with the target).
+
+        Port scanning is IP-level and intrusive, so it never targets Cloudflare/CDN
+        IPs, and — when ``enforce_scope`` is set with declared ``owned_cidrs`` — only
+        scans IPs inside those owned ranges.
 
         ``should_cancel`` is checked between batches so a long enrichment run can
         be stopped promptly; when it returns True we return whatever finished so
@@ -145,6 +166,7 @@ class EnrichmentService:
         """
         do_ports = settings.enable_port_scan if port_scan is None else port_scan
         do_probe = settings.enable_http_probe if http_probe is None else http_probe
+        owned_cidrs = owned_cidrs or []
         sem = asyncio.Semaphore(self.concurrency)
         timeout = aiohttp.ClientTimeout(total=self.http_timeout)
         connector = aiohttp.TCPConnector(ssl=False, limit=self.concurrency)
@@ -158,7 +180,9 @@ class EnrichmentService:
                 async with sem:
                     # Results are written as each name finishes so partial work
                     # is preserved and in-flight tasks can be cancelled promptly.
-                    results[name] = await self._enrich_one(session, name, do_ports, do_probe)
+                    results[name] = await self._enrich_one(
+                        session, name, do_ports, do_probe, owned_cidrs, enforce_scope
+                    )
 
             cancelled = False
             for start in range(0, len(names), batch_size):
@@ -184,7 +208,8 @@ class EnrichmentService:
                             len(results), len(names))
         return results
 
-    async def _enrich_one(self, session, name: str, do_ports: bool, do_probe: bool = True) -> EnrichResult:
+    async def _enrich_one(self, session, name: str, do_ports: bool, do_probe: bool = True,
+                          owned_cidrs: Optional[List[str]] = None, enforce_scope: bool = False) -> EnrichResult:
         result = EnrichResult()
         result.dns_records = await asyncio.to_thread(self._resolve, name)
         result.resolved_ips = list(result.dns_records["A"])
@@ -197,9 +222,21 @@ class EnrichmentService:
             await self._probe(session, name, result)
 
         if do_ports and result.resolved_ips:
-            result.open_ports = await self._scan_ports(result.resolved_ips[0])
+            ip = result.resolved_ips[0]
+            if self._port_scan_allowed(ip, owned_cidrs or [], enforce_scope):
+                result.open_ports = await self._scan_ports(ip)
 
         return result
+
+    @staticmethod
+    def _port_scan_allowed(ip: str, owned_cidrs: List[str], enforce_scope: bool) -> bool:
+        """Port scanning is IP-level: never scan CDN IPs (they aren't yours), and
+        when scope is enforced with declared ranges, only scan owned IPs."""
+        if is_cloudflare_ip(ip):
+            return False
+        if enforce_scope and owned_cidrs:
+            return ip_in_cidrs(ip, owned_cidrs)
+        return True
 
     def _resolve(self, name: str) -> dict:
         import dns.resolver

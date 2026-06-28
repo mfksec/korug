@@ -79,6 +79,8 @@ class Subdomain(Base):
     technologies = Column(Text, nullable=True)        # JSON array of detected tech
     open_ports = Column(Text, nullable=True)          # JSON array of open ports
     is_cloudflare = Column(Boolean, default=False)    # resolved IP in Cloudflare ranges
+    # Ownership/scope confidence 0-100 (name + IP ownership, hosting). Gates active scans.
+    ownership_confidence = Column(Float, nullable=True)
     last_enriched = Column(DateTime, nullable=True)
 
     # Lifecycle: a name discovered in a prior scan but absent from the latest

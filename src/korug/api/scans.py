@@ -26,6 +26,7 @@ from korug.services import cve as cve_service
 from korug.services import certificates as cert_service
 from korug.services import changes as change_service
 from korug.services import nuclei as nuclei_service
+from korug.services import scope as scope_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -239,21 +240,25 @@ async def _run_incremental_enrichment(db: Session, scan, incremental_ids: list[i
     return new_vulns
 
 
-async def _run_nuclei(db: Session, scan, incremental_ids: list[int], enriched: dict) -> int:
+async def _run_nuclei(db: Session, scan, incremental_ids: list[int], enriched: dict,
+                      *, owned_cidrs: list[str] | None = None,
+                      monitored_apexes: list[str] | None = None,
+                      enforce_scope: bool = False) -> int:
     """Active template scanning (nuclei) over the incremental alive host set.
 
-    Opt-in (``enable_nuclei``) and caller-gated to active monitor mode. nuclei is
-    run once over the whole batch (it parallelizes internally). Fully fault-isolated:
-    a missing binary, timeout, or any error is logged and yields no findings.
-    Returns the count of newly-created findings.
+    Opt-in (``enable_nuclei``) and caller-gated to active monitor mode. Scope-gated:
+    when ``enforce_scope`` is set, only hosts that are ours by name and not hosted on
+    a third-party app service are scanned. nuclei runs once over the batch (it
+    parallelizes internally). Fully fault-isolated. Returns new finding count.
     """
     cfg = get_settings()
     if not cfg.enable_nuclei or not incremental_ids:
         return 0
 
-    # Build hostname → subdomain and the target URL list (alive hosts only).
+    # Build hostname → subdomain and the target URL list (alive + in-scope hosts).
     host_to_id: dict[str, int] = {}
     urls: list[str] = []
+    skipped = 0
     for sub_id in incremental_ids:
         sub = db.query(Subdomain).filter(Subdomain.id == sub_id).first()
         if not sub:
@@ -261,8 +266,19 @@ async def _run_nuclei(db: Session, scan, incremental_ids: list[int], enriched: d
         res = enriched.get(sub.subdomain)
         if not (res and res.is_alive):
             continue
+        if enforce_scope:
+            verdict = scope_service.classify(
+                sub.subdomain, list(res.resolved_ips), res.dns_records.get("CNAME"),
+                owned_cidrs=owned_cidrs, monitored_apexes=monitored_apexes,
+            )
+            if not verdict["host_active_allowed"]:
+                skipped += 1
+                continue
         host_to_id[sub.subdomain.lower()] = sub.id
         urls.append((res.final_url or f"https://{sub.subdomain}"))
+
+    if skipped:
+        logger.info("nuclei: skipped %d out-of-scope host(s)", skipped)
 
     if not urls:
         return 0
@@ -359,6 +375,13 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
         passive = (domain.monitor_mode or "active") == "passive"
         logger.info(f"Starting {'passive' if passive else 'active'} scan for domain {domain.domain_name}")
 
+        # Scope / ownership context for gating active tools ("scope is law").
+        from korug.config import get_settings as _get_settings
+        _cfg = _get_settings()
+        owned_cidrs = [c.strip() for c in (_cfg.scope_cidrs or "").split(",") if c.strip()]
+        enforce_scope = _cfg.require_scope_for_active
+        monitored_apexes = [name.lower() for (name,) in db.query(Domain.domain_name).all()]
+
         # Create scan history entry
         scan = ScanHistory(domain_id=domain_id, status="running")
         db.add(scan)
@@ -388,6 +411,8 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                 names,
                 port_scan=False if passive else port_scan,
                 http_probe=False if passive else None,
+                owned_cidrs=owned_cidrs,
+                enforce_scope=enforce_scope,
                 should_cancel=lambda: _scan_cancel_requested(db, scan.id),
             )
 
@@ -459,6 +484,12 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                 # Record attack-surface changes for this host.
                 current_state = _host_state(res)
                 diffs = change_service.diff_subdomain(prior_state, current_state)
+
+                # Ownership/scope confidence (drives active-scan gating + review).
+                db_subdomain.ownership_confidence = scope_service.classify(
+                    subdomain, current_state["resolved_ips"], dns_records.get("CNAME"),
+                    owned_cidrs=owned_cidrs, monitored_apexes=monitored_apexes,
+                )["confidence"]
                 if prior_state is None:
                     diffs = [{"change_type": "subdomain_added", "old_value": None,
                               "new_value": ", ".join(current_state["resolved_ips"]) or None}]
@@ -531,9 +562,14 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                 db, scan, incremental_ids, enriched
             )
 
-            # Active template scanning (nuclei) — active monitor mode only, opt-in.
+            # Active template scanning (nuclei) — active monitor mode only, opt-in,
+            # and scope-gated (only hosts we're authorized to actively probe).
             if not passive:
-                vulnerabilities_found += await _run_nuclei(db, scan, incremental_ids, enriched)
+                vulnerabilities_found += await _run_nuclei(
+                    db, scan, incremental_ids, enriched,
+                    owned_cidrs=owned_cidrs, monitored_apexes=monitored_apexes,
+                    enforce_scope=enforce_scope,
+                )
 
             # Gone-tracking: names present in a prior scan but absent from this
             # one (last_seen older than this scan) are flagged gone + logged once.
@@ -1046,6 +1082,7 @@ def _serialize_subdomain(s: Subdomain) -> dict:
         "open_ports": _json_list(s.open_ports),
         "is_cloudflare": bool(s.is_cloudflare),
         "is_gone": bool(s.is_gone),
+        "ownership_confidence": s.ownership_confidence,
         "first_discovered": s.first_discovered.isoformat() + "Z" if s.first_discovered else None,
     }
 

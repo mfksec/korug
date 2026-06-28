@@ -152,6 +152,12 @@ export function SubdomainDetailPage() {
               <Typography variant="h4" sx={{ fontFamily: FONT_MONO, fontSize: 20 }}>{a.subdomain}</Typography>
               <TintChip label={st.label} color={st.color} dot />
               {a.is_cloudflare && <Chip size="small" label="Cloudflare" sx={{ fontWeight: 700, fontSize: 11 }} />}
+              {typeof a.ownership_confidence === 'number' && (
+                <TintChip
+                  label={`Scope ${Math.round(a.ownership_confidence)}%`}
+                  color={a.ownership_confidence >= 90 ? 'success' : a.ownership_confidence >= 50 ? 'warning' : 'error'}
+                />
+              )}
             </Box>
             <Typography sx={{ fontSize: 13, color: 'text.disabled', mt: 0.4 }}>
               Last seen {timeAgo(a.last_seen)}{a.final_url ? ' · ' : ''}

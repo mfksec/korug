@@ -17,6 +17,7 @@ export interface EnrichedSubdomain {
   open_ports: OpenPort[]
   is_cloudflare: boolean
   is_gone: boolean
+  ownership_confidence: number | null
   first_discovered: string | null
 }
 

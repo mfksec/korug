@@ -29,6 +29,7 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 - Precise subdomain takeover detection — CNAME-to-known-service (GitHub Pages, Heroku, Shopify, Fastly, … ~30 services) confirmed by a dangling-DNS (NXDOMAIN) or HTTP-body fingerprint signal, plus unclaimed S3 buckets and orphaned CNAME / MX / NS — with per-finding confidence scoring
 - Automatic CVE lookup (NVD) for new/changed live hosts, using fingerprinted product+version
 - Optional active scanning with **nuclei** (takeover / CVE / exposure / misconfiguration / default-login templates) for domains in active monitoring mode
+- **Scope-aware** active scanning ("scope is law"): per-asset ownership-confidence scoring, so intrusive tools only run against hosts you're authorized to probe — nuclei skips third-party-app-hosted names, port scans skip shared CDN IPs and honour your declared owned ranges
 - Certificate Transparency monitoring via crt.sh — issuer, validity, SANs per host
 
 **Continuous attack-surface monitoring**
