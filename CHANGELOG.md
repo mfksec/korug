@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-28
+
+### Added
+- **Ownership attribution + scope gating for active scanning** ("scope is law"): each
+  asset gets an **ownership-confidence** score (name ownership + declared owned IP
+  ranges `SCOPE_CIDRS` + hosting classification), shown on the subdomain detail view.
+  When `REQUIRE_SCOPE_FOR_ACTIVE` is on (default), intrusive tools are gated:
+  - **nuclei** only scans hosts owned by name and **not** hosted on a third-party app
+    service (e.g. a CNAME to `github.io`/`herokuapp.com`) — CDN-fronted hosts are fine.
+  - **port scan** never targets shared CDN IPs, and (when `SCOPE_CIDRS` is set) only
+    scans IPs inside your declared ranges.
+
 ## [0.3.0] - 2026-06-28
 
 ### Added
