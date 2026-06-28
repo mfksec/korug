@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-28
+
 ### Added
 - **Ownership attribution + scope gating for active scanning** ("scope is law"): each
   asset gets an **ownership-confidence** score (name ownership + declared owned IP
