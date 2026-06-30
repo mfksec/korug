@@ -25,10 +25,13 @@ All dashboards reflect real scan data: charts, alerts, and statistics are comput
 - DNS resolution to IPs, with subdomains classified by shared IP
 - HTTP(S) probing with smart https→http fallback: status code, final URL, title, content-length, server
 - Technology fingerprinting and Cloudflare detection
-- Optional port scan (nmap with service/version when available, else built-in TCP scan)
+- Optional port scan: a fast **masscan → nmap** pipeline (wide-range sweep, then service/version detection on the open ports) when enabled, falling back to nmap alone or a built-in TCP scan
+- Optional **subdomain brute-force** with **massdns** (wordlist-driven, high-speed DNS) as an additional discovery source
 - Precise subdomain takeover detection — CNAME-to-known-service (GitHub Pages, Heroku, Shopify, Fastly, … ~30 services) confirmed by a dangling-DNS (NXDOMAIN) or HTTP-body fingerprint signal, plus unclaimed S3 buckets and orphaned CNAME / MX / NS — with per-finding confidence scoring
 - Automatic CVE lookup (NVD) for new/changed live hosts, using fingerprinted product+version
 - Optional active scanning with **nuclei** (takeover / CVE / exposure / misconfiguration / default-login templates) for domains in active monitoring mode
+- Optional active **TLS/SSL audit** with **tlsx** — expired / self-signed / hostname-mismatched / untrusted certs, deprecated protocol versions (SSLv3, TLS 1.0/1.1), and weak ciphers
+- Optional **cloud bucket enumeration** (AWS S3 / GCS / Azure Blob) — flags publicly-listable storage derived from your domain keyword
 - **Scope-aware** active scanning ("scope is law"): per-asset ownership-confidence scoring, so intrusive tools only run against hosts you're authorized to probe — nuclei skips third-party-app-hosted names, port scans skip shared CDN IPs and honour your declared owned ranges
 - Certificate Transparency monitoring via crt.sh — issuer, validity, SANs per host
 
@@ -90,7 +93,8 @@ On first run an initial `admin` account is created. If `ADMIN_PASSWORD` is not s
 Körüg builds on the work of the open-source security community. Thanks to:
 
 - **[can-i-take-over-xyz](https://github.com/EdOverflow/can-i-take-over-xyz)** by EdOverflow and contributors — the source of the subdomain-takeover service CNAME patterns and fingerprints used in [`takeover_fingerprints.py`](src/korug/services/takeover_fingerprints.py). Licensed **CC BY-SA 4.0**; our curated subset is a derivative work shared under the same terms.
-- **Discovery & recon tooling/data**: [ProjectDiscovery](https://github.com/projectdiscovery) (subfinder), [OWASP Amass](https://github.com/owasp-amass/amass), [crt.sh](https://crt.sh) and CertSpotter (Certificate Transparency), HackerTarget, RapidDNS, AlienVault OTX, ThreatMiner, the Wayback Machine, and the optional providers VirusTotal, SecurityTrails, BinaryEdge, Censys, urlscan.io, and Shodan.
+- **Discovery & recon tooling/data**: [ProjectDiscovery](https://github.com/projectdiscovery) (subfinder, [nuclei](https://github.com/projectdiscovery/nuclei), [tlsx](https://github.com/projectdiscovery/tlsx)), [OWASP Amass](https://github.com/owasp-amass/amass), [massdns](https://github.com/blechschmidt/massdns) (Quirin Scheitle / blechschmidt), [masscan](https://github.com/robertdavidgraham/masscan) (Robert Graham) and [nmap](https://nmap.org), [crt.sh](https://crt.sh) and CertSpotter (Certificate Transparency), HackerTarget, RapidDNS, AlienVault OTX, ThreatMiner, the Wayback Machine, and the optional providers VirusTotal, SecurityTrails, BinaryEdge, Censys, urlscan.io, and Shodan.
+- **Cloud bucket enumeration**: the permutation approach is inspired by [cloud_enum](https://github.com/initstring/cloud_enum) (initstring) and [S3Scanner](https://github.com/sa7mon/S3Scanner) (sa7mon).
 - **Vulnerability data**: the [NVD](https://nvd.nist.gov/) CVE feed (NIST).
 - **Core libraries**: FastAPI, SQLAlchemy, dnspython, aiohttp, boto3, nmap + defusedxml, APScheduler, React, Vite, MUI, and Recharts.
 

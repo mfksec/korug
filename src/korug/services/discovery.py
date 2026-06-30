@@ -101,6 +101,10 @@ class DiscoveryService:
                 coros["subfinder"] = asyncio.to_thread(self._run_subfinder, domain)
             if settings.enable_amass:
                 coros["amass"] = asyncio.to_thread(self._run_amass, domain)
+            # massdns active DNS brute-force is opt-in and only runs when a
+            # wordlist + resolvers are configured (guarded inside the service).
+            if settings.enable_massdns:
+                coros["massdns"] = asyncio.to_thread(self._run_massdns, domain)
             if k["shodan"]:
                 coros["shodan"] = asyncio.to_thread(self._query_shodan, domain, k["shodan"])
 
@@ -306,6 +310,10 @@ class DiscoveryService:
         except Exception as e:
             logger.warning("Amass error: %s", e)
         return results
+
+    def _run_massdns(self, domain: str) -> Set[str]:
+        from korug.services import dns_bruteforce
+        return dns_bruteforce.run(domain)
 
     def _query_shodan(self, domain: str, api_key: str) -> Set[str]:
         results: Set[str] = set()
