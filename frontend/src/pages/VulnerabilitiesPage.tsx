@@ -5,8 +5,9 @@ import {
   LinearProgress,
 } from '@mui/material'
 import FileDownloadOutlined from '@mui/icons-material/FileDownloadOutlined'
+import GppGoodOutlined from '@mui/icons-material/GppGoodOutlined'
 import { FONT_MONO } from '@/styles/theme'
-import { SearchField, Segmented, ConfidenceBar, vulnTypeMeta } from '@/components/common/Widgets'
+import { SearchField, Segmented, ConfidenceBar, vulnTypeMeta, EmptyState } from '@/components/common/Widgets'
 import { fetchVulnerabilities, setVulnerabilityFalsePositive } from '@/data/apiAdapters'
 import { downloadCsv } from '@/utils/download'
 import { apiErrorMessage } from '@/utils/apiError'
@@ -107,6 +108,17 @@ export function VulnerabilitiesPage() {
 
       {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
 
+      {!loading && rows.length === 0 ? (
+        vulns.length === 0 ? (
+          <EmptyState
+            icon={<GppGoodOutlined />}
+            title="No vulnerabilities found"
+            description="Nothing to act on right now. Findings from your scans — takeovers, CVEs, TLS issues and more — will appear here."
+          />
+        ) : (
+          <EmptyState icon={<GppGoodOutlined />} title="No vulnerabilities match your filters" description="Try a different search term, type, or status filter." />
+        )
+      ) : (
       <Card>
         <TableContainer>
           <Table sx={{ '& td, & th': { borderColor: 'divider' } }}>
@@ -145,9 +157,6 @@ export function VulnerabilitiesPage() {
                   </TableRow>
                 )
               })}
-              {rows.length === 0 && !loading && (
-                <TableRow><TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.disabled' }}>No vulnerabilities match your filters.</TableCell></TableRow>
-              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -163,6 +172,7 @@ export function VulnerabilitiesPage() {
           />
         )}
       </Card>
+      )}
 
       <Snackbar open={!!toast} autoHideDuration={2600} onClose={() => setToast('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity="success" variant="filled" onClose={() => setToast('')}>{toast}</Alert>

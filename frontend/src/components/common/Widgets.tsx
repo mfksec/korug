@@ -148,17 +148,19 @@ export function StatCard({ label, value, sub, icon, accent }: StatCardProps) {
 }
 
 export interface SegOption<T> { value: T; label: string }
-interface SegmentedProps<T> { value: T; options: SegOption<T>[]; onChange: (v: T) => void }
-export function Segmented<T extends string>({ value, options, onChange }: SegmentedProps<T>) {
+interface SegmentedProps<T> { value: T; options: SegOption<T>[]; onChange: (v: T) => void; ariaLabel?: string }
+export function Segmented<T extends string>({ value, options, onChange, ariaLabel = 'Filter' }: SegmentedProps<T>) {
   const theme = useTheme()
   return (
-    <Box sx={{ display: 'flex', gap: 0.25, p: '3px', bgcolor: theme.palette.surface.subtle, border: 1, borderColor: 'divider', borderRadius: 2 }}>
+    <Box role="group" aria-label={ariaLabel} sx={{ display: 'flex', gap: 0.25, p: '3px', bgcolor: theme.palette.surface.subtle, border: 1, borderColor: 'divider', borderRadius: 2 }}>
       {options.map((o) => {
         const active = o.value === value
         return (
           <Box
             key={o.value}
             component="button"
+            type="button"
+            aria-pressed={active}
             onClick={() => onChange(o.value)}
             sx={{
               border: 'none', cursor: 'pointer', px: 1.6, py: 0.8, borderRadius: 1.5,
@@ -181,10 +183,12 @@ export function SearchField({ value, onChange, placeholder = 'Search…', sx }: 
   return (
     <TextField
       size="small"
+      type="search"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' }, ...sx }}
+      inputProps={{ 'aria-label': placeholder }}
       InputProps={{
         startAdornment: (
           <InputAdornment position="start">
@@ -193,5 +197,27 @@ export function SearchField({ value, onChange, placeholder = 'Search…', sx }: 
         ),
       }}
     />
+  )
+}
+
+interface EmptyStateProps { icon?: ReactNode; title: string; description?: string; action?: ReactNode }
+/** Centered placeholder for first-run / no-results states. Announced to screen
+ * readers via role="status". */
+export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+  return (
+    <Card>
+      <CardContent>
+        <Box role="status" sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', py: 7, px: 3 }}>
+          {icon && (
+            <Box sx={{ width: 56, height: 56, borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'surface.subtle', color: 'text.disabled', mb: 2, '& svg': { fontSize: 28 } }}>
+              {icon}
+            </Box>
+          )}
+          <Typography sx={{ fontWeight: 700, fontSize: 16, mb: description ? 0.75 : 0 }}>{title}</Typography>
+          {description && <Typography sx={{ fontSize: 13.5, color: 'text.disabled', maxWidth: 440 }}>{description}</Typography>}
+          {action && <Box sx={{ mt: 2.5 }}>{action}</Box>}
+        </Box>
+      </CardContent>
+    </Card>
   )
 }

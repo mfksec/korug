@@ -4,8 +4,9 @@ import {
   Box, Card, Table, TableBody, TableCell, TableHead, TableRow,
   TableContainer, TableSortLabel, Select, MenuItem, Snackbar, Alert, LinearProgress,
 } from '@mui/material'
+import TimelineOutlined from '@mui/icons-material/TimelineOutlined'
 import { FONT_MONO } from '@/styles/theme'
-import { SearchField, Segmented, TintChip, changeTypeMeta } from '@/components/common/Widgets'
+import { SearchField, Segmented, TintChip, changeTypeMeta, EmptyState } from '@/components/common/Widgets'
 import { changeAPI, type AssetChange } from '@/api/changes'
 import { timeAgo } from '@/data/apiAdapters'
 import { apiErrorMessage } from '@/utils/apiError'
@@ -80,6 +81,17 @@ export function ChangesPage() {
 
       {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
 
+      {!loading && rows.length === 0 ? (
+        changes.length === 0 ? (
+          <EmptyState
+            icon={<TimelineOutlined />}
+            title="No changes in this window"
+            description="As Körüg re-scans your domains it records attack-surface changes — new or removed subdomains, IP and tech changes, new certificates. Widen the time window or run a scan to populate this feed."
+          />
+        ) : (
+          <EmptyState icon={<TimelineOutlined />} title="No changes match your filters" description="Try a different search term or change type." />
+        )
+      ) : (
       <Card>
         <TableContainer>
           <Table sx={{ '& td, & th': { borderColor: 'divider' } }}>
@@ -107,13 +119,11 @@ export function ChangesPage() {
                   </TableRow>
                 )
               })}
-              {rows.length === 0 && !loading && (
-                <TableRow><TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.disabled' }}>No changes in this window.</TableCell></TableRow>
-              )}
             </TableBody>
           </Table>
         </TableContainer>
       </Card>
+      )}
 
       <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity="error" variant="filled" onClose={() => setToast('')}>{toast}</Alert>

@@ -89,6 +89,19 @@ export function AppLayout() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      {/* Skip link: first focusable element, visible only when focused. */}
+      <Box
+        component="a"
+        href="#main-content"
+        sx={{
+          position: 'absolute', left: 8, top: -48, zIndex: (t) => t.zIndex.modal + 1,
+          px: 2, py: 1, borderRadius: 1.5, bgcolor: 'background.paper', color: 'text.primary',
+          border: 1, borderColor: 'divider', fontSize: 13, fontWeight: 700, textDecoration: 'none',
+          transition: 'top .15s', '&:focus': { top: 8 },
+        }}
+      >
+        Skip to content
+      </Box>
       <Drawer
         variant="permanent"
         sx={{
@@ -108,7 +121,7 @@ export function AppLayout() {
         </Box>
 
         <Typography sx={{ px: 2.7, pt: 2, pb: 1, fontSize: 10.5, fontWeight: 700, letterSpacing: '.8px', textTransform: 'uppercase', color: sb.text, opacity: 0.7 }}>Monitoring</Typography>
-        <List sx={{ px: 1.2, flex: 1 }}>
+        <List component="nav" aria-label="Primary navigation" sx={{ px: 1.2, flex: 1 }}>
           {NAV.map((item) => {
             const active = isActive(item.path)
             const badge = item.path === '/alerts' && activeAlerts > 0 ? activeAlerts : null
@@ -161,27 +174,29 @@ export function AppLayout() {
               <TextField
                 size="small"
                 placeholder="Search domains, subdomains, hosts…"
+                type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') submitSearch() }}
                 sx={{ width: '100%', maxWidth: 440, '& .MuiOutlinedInput-root': { bgcolor: 'background.default' } }}
+                inputProps={{ 'aria-label': 'Search domains, subdomains, and hosts' }}
                 InputProps={{ startAdornment: <InputAdornment position="start"><SearchOutlined sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
               />
             </Box>
             <Button variant="contained" color="primary" startIcon={<RadarOutlined />} onClick={() => navigate('/domains')}>Scan now</Button>
             <Tooltip title="Toggle theme">
-              <IconButton onClick={toggle} sx={{ border: 1, borderColor: 'divider', borderRadius: 1.75 }}>
+              <IconButton onClick={toggle} aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} sx={{ border: 1, borderColor: 'divider', borderRadius: 1.75 }}>
                 {mode === 'dark' ? <LightModeOutlined sx={{ fontSize: 19 }} /> : <DarkModeOutlined sx={{ fontSize: 19 }} />}
               </IconButton>
             </Tooltip>
             <Tooltip title="Alerts">
-              <IconButton onClick={() => navigate('/alerts')} sx={{ border: 1, borderColor: 'divider', borderRadius: 1.75 }}>
+              <IconButton onClick={() => navigate('/alerts')} aria-label={`Alerts${activeAlerts > 0 ? `, ${activeAlerts} active` : ''}`} sx={{ border: 1, borderColor: 'divider', borderRadius: 1.75 }}>
                 <Badge badgeContent={activeAlerts} color="error" max={99}>
                   <NotificationsNoneOutlined sx={{ fontSize: 19 }} />
                 </Badge>
               </IconButton>
             </Tooltip>
-            <Button onClick={(e: MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget)} sx={{ borderRadius: 20, border: 1, borderColor: 'divider', pl: 0.5, pr: 1, py: 0.5, minWidth: 0 }}>
+            <Button onClick={(e: MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget)} aria-label="Account menu" aria-haspopup="true" sx={{ borderRadius: 20, border: 1, borderColor: 'divider', pl: 0.5, pr: 1, py: 0.5, minWidth: 0 }}>
               <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.brand.main, fontSize: 12, fontWeight: 700 }}>{initials}</Avatar>
               <KeyboardArrowDownOutlined sx={{ fontSize: 16, color: 'text.disabled', ml: 0.5 }} />
             </Button>
@@ -197,7 +212,7 @@ export function AppLayout() {
           </Toolbar>
         </AppBar>
 
-        <Box component="main" sx={{ p: 3.5, maxWidth: 1320, mx: 'auto' }}>
+        <Box component="main" id="main-content" tabIndex={-1} sx={{ p: 3.5, maxWidth: 1320, mx: 'auto', outline: 'none' }}>
           <Outlet />
         </Box>
       </Box>

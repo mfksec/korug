@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  Box, Card, Typography, Table, TableBody, TableCell, TableHead, TableRow,
+  Box, Button, Card, Typography, Table, TableBody, TableCell, TableHead, TableRow,
   TableContainer, TableSortLabel, TablePagination, Snackbar, Alert, LinearProgress,
 } from '@mui/material'
+import DnsOutlined from '@mui/icons-material/DnsOutlined'
 import { FONT_MONO } from '@/styles/theme'
-import { SearchField, Segmented, TintChip } from '@/components/common/Widgets'
+import { SearchField, Segmented, TintChip, EmptyState } from '@/components/common/Widgets'
 import { scanAPI, type Asset } from '@/api/scans'
 import { timeAgo } from '@/data/apiAdapters'
 import { apiErrorMessage } from '@/utils/apiError'
@@ -101,6 +102,18 @@ export function AssetsPage() {
 
       {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
 
+      {!loading && rows.length === 0 ? (
+        assets.length === 0 ? (
+          <EmptyState
+            icon={<DnsOutlined />}
+            title="No assets discovered yet"
+            description="Subdomains and hosts appear here as Körüg discovers them. Add a domain to start mapping your attack surface."
+            action={<Button variant="contained" color="primary" onClick={() => navigate('/domains')}>Go to domains</Button>}
+          />
+        ) : (
+          <EmptyState icon={<DnsOutlined />} title="No assets match your search or filter" description="Try a different search term or filter." />
+        )
+      ) : (
       <Card>
         <TableContainer>
           <Table sx={{ '& td, & th': { borderColor: 'divider' } }}>
@@ -127,9 +140,6 @@ export function AssetsPage() {
                   </TableRow>
                 )
               })}
-              {rows.length === 0 && !loading && (
-                <TableRow><TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.disabled' }}>No assets match your search or filter.</TableCell></TableRow>
-              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -145,6 +155,7 @@ export function AssetsPage() {
           />
         )}
       </Card>
+      )}
 
       <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity="error" variant="filled" onClose={() => setToast('')}>{toast}</Alert>
