@@ -12,6 +12,8 @@ import WarningAmberOutlined from '@mui/icons-material/WarningAmberOutlined'
 import { FONT_MONO } from '@/styles/theme'
 import { SearchField, Segmented, RiskChip, TintChip, riskMeta, subStatusMeta } from '@/components/common/Widgets'
 import { fetchDomainDetail, rescanDomain, setDomainMonitorMode, type DomainDetail } from '@/data/apiAdapters'
+import { exportAPI } from '@/api/export'
+import { downloadBlob } from '@/utils/download'
 import { apiErrorMessage } from '@/utils/apiError'
 
 export function DomainDetailPage() {
@@ -26,6 +28,7 @@ export function DomainDetailPage() {
   const [filter, setFilter] = useState<'all' | 'live' | 'issues' | 'gone'>('all')
   const [sortBy, setSortBy] = useState<'host' | 'status'>('host')
   const [dir, setDir] = useState<'asc' | 'desc'>('asc')
+  const [exporting, setExporting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -65,6 +68,19 @@ export function DomainDetailPage() {
       setToast('Rescan started')
     } catch (err) {
       setToast(apiErrorMessage(err, 'Failed to start rescan'))
+    }
+  }
+
+  const exportXlsx = async () => {
+    setExporting(true)
+    try {
+      const blob = await exportAPI.domainXlsx(domainId)
+      const name = detail?.domain?.domain_name ?? 'domain'
+      downloadBlob(blob, `korug-${name}.xlsx`)
+    } catch (err) {
+      setToast(apiErrorMessage(err, 'Failed to export'))
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -115,7 +131,7 @@ export function DomainDetailPage() {
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap' }}>
           <Segmented value={domain.monitor_mode} onChange={changeMode} options={[{ value: 'active', label: 'Active' }, { value: 'passive', label: 'Passive' }]} />
-          <Button variant="outlined" color="inherit" startIcon={<FileDownloadOutlined />} sx={{ borderColor: 'divider', color: 'text.secondary' }}>Export XLSX</Button>
+          <Button variant="outlined" color="inherit" startIcon={<FileDownloadOutlined />} onClick={exportXlsx} disabled={exporting} sx={{ borderColor: 'divider', color: 'text.secondary' }}>{exporting ? 'Exporting…' : 'Export XLSX'}</Button>
           <Button variant="contained" color="primary" startIcon={<RefreshOutlined />} onClick={rescan}>Rescan</Button>
         </Box>
       </Box>

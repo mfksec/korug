@@ -9,7 +9,7 @@ import AddOutlined from '@mui/icons-material/AddOutlined'
 import DeleteOutline from '@mui/icons-material/DeleteOutline'
 import PublicOutlined from '@mui/icons-material/PublicOutlined'
 import { FONT_MONO } from '@/styles/theme'
-import { SearchField, Segmented, RiskChip } from '@/components/common/Widgets'
+import { SearchField, Segmented, RiskChip, EmptyState } from '@/components/common/Widgets'
 import { fetchDomains, createDomain, deleteDomain } from '@/data/apiAdapters'
 import { apiErrorMessage } from '@/utils/apiError'
 import { Domain, RiskLevel } from '@/types/domain'
@@ -101,6 +101,18 @@ export function DomainsPage() {
 
       {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
 
+      {!loading && rows.length === 0 ? (
+        domains.length === 0 ? (
+          <EmptyState
+            icon={<PublicOutlined />}
+            title="No domains yet"
+            description="Add your first domain and Körüg will start discovering its attack surface across every enabled source."
+            action={<Button variant="contained" color="primary" startIcon={<AddOutlined />} onClick={() => setAddOpen(true)}>Add domain</Button>}
+          />
+        ) : (
+          <EmptyState icon={<PublicOutlined />} title="No domains match your filters" description="Try a different search term or filter." />
+        )
+      ) : (
       <Card>
         <TableContainer>
           <Table sx={{ '& td, & th': { borderColor: 'divider' } }}>
@@ -137,13 +149,11 @@ export function DomainsPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {rows.length === 0 && !loading && (
-                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 6, color: 'text.disabled' }}>No domains match your search or filter.</TableCell></TableRow>
-              )}
             </TableBody>
           </Table>
         </TableContainer>
       </Card>
+      )}
 
       <Dialog open={addOpen} onClose={() => setAddOpen(false)} PaperProps={{ sx: { borderRadius: 3, width: 480 } }}>
         <DialogTitle sx={{ fontFamily: theme.typography.h6.fontFamily, fontWeight: 700 }}>Add domain</DialogTitle>
