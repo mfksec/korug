@@ -1,18 +1,45 @@
 <h1 align="center">𐰚𐰘𐰺𐰈𐰏 Körüg</h1>
 
 <p align="center">
-    Subdomain discovery, takeover detection, and continuous monitoring
+    <b>Self-hosted External Attack Surface Management.</b><br/>
+    Continuously discover, monitor, and secure everything your organization exposes to the internet — open-source, scope-aware, and built on best-of-breed tooling. Own your data.
+</p>
+
+<p align="center">
+    <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square" alt="Python 3.11+" />
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/mfksec/korug?style=flat-square" alt="License: Apache-2.0" /></a>
+    <a href="https://github.com/mfksec/korug/releases"><img src="https://img.shields.io/github/v/release/mfksec/korug?style=flat-square&include_prereleases" alt="Release" /></a>
 </p>
 
 # Overview
 
-Körüg (Old Turkic for "protection/guardian") automates subdomain discovery and takeover vulnerability detection. It enumerates subdomains across multiple sources, scores takeover risk, and surfaces findings through a web dashboard, REST API, and CLI — with Slack and email alerts when something needs attention.
+Körüg (Old Turkic for "protection/guardian") is a self-hosted EASM platform: it continuously **discovers** your internet-facing assets, **attributes** ownership, **enriches** and **assesses** them, and **alerts** when your attack surface changes or a risk appears — through a web dashboard, REST API, and CLI.
+
+It unifies the best open-source recon and scanning tools (subfinder, nuclei, tlsx, masscan, massdns, Amass, and more) behind one continuous, **scope-aware** control plane — so instead of running one-off CLI scans, you get an always-on inventory with change tracking, takeover detection, and prioritized findings. **"Scope is law"**: intrusive tools only ever run against assets you've proven you own.
 
 All dashboards reflect real scan data: charts, alerts, and statistics are computed from your own scans, not seeded samples.
 
+<!-- TODO(launch): replace this static screenshot with a ~60s animated demo GIF (clone → docker compose up → add a domain → findings populate → Slack alert). Demo media is the single biggest driver of conversion for security OSS. -->
 <p align="center">
     <img src="docs/images/dashboard.png" alt="Körüg dashboard — stat cards, findings timeline, risk distribution, latest vulnerabilities and recent alerts" width="900" />
 </p>
+
+## Why Körüg?
+
+The recon space splits into two camps — paid SaaS you don't control, and powerful one-shot CLI tools with no continuous loop. Körüg fills the gap between them.
+
+| | **Körüg** | SaaS EASM<br/>(Censys / Detectify / Intruder) | OSS CLI tools<br/>(nuclei, amass, reconftw) | Web-UI recon<br/>(reNgine) |
+|---|:---:|:---:|:---:|:---:|
+| Self-hosted, own your data | ✅ | ❌ | ✅ | ✅ |
+| Free & open-source | ✅ | ❌ | ✅ | ✅ |
+| Continuous monitoring + change tracking | ✅ | ✅ | ❌ | ⚠️ partial |
+| Web dashboard + REST API + CLI | ✅ | ✅ | ❌ | ✅ |
+| Ownership-confidence **scope gating** | ✅ | ⚠️ varies | ❌ | ❌ |
+| Passive-first / active-confirm modes | ✅ | ⚠️ varies | ❌ | ❌ |
+| Alerting (Slack / email) | ✅ | ✅ | ❌ | ⚠️ partial |
+| No paid data source required | ✅ | ❌ | ✅ | ✅ |
+
+Körüg's differentiators: **scope-is-law ownership gating** before any intrusive probe, **passive/active monitoring modes** per domain, and a **continuous loop** (discover → attribute → enrich → assess → prioritize → alert → verify) rather than a one-time scan. See the [roadmap](ROADMAP.md) for where it's headed.
 
 # Features
 

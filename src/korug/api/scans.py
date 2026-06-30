@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, 
 from sqlalchemy.orm import Session
 
 from korug.db import get_db
+from korug.config import get_settings
 from korug.auth_utils import get_current_user
 from korug.audit import log_audit_event, AuditEvent
 from korug.models import (
@@ -201,7 +202,6 @@ async def _run_incremental_enrichment(db: Session, scan, incremental_ids: list[i
 
     Raises only ``_ScanCancelled`` (when a cancel is requested between hosts).
     """
-    from korug.config import get_settings
     cfg = get_settings()
     if not incremental_ids or not (cfg.enable_auto_cve or cfg.enable_cert_monitoring):
         return 0
@@ -553,8 +553,7 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
         logger.info(f"Starting {'passive' if passive else 'active'} scan for domain {domain.domain_name}")
 
         # Scope / ownership context for gating active tools ("scope is law").
-        from korug.config import get_settings as _get_settings
-        _cfg = _get_settings()
+        _cfg = get_settings()
         owned_cidrs = [c.strip() for c in (_cfg.scope_cidrs or "").split(",") if c.strip()]
         enforce_scope = _cfg.require_scope_for_active
         monitored_apexes = [name.lower() for (name,) in db.query(Domain.domain_name).all()]
@@ -1094,7 +1093,6 @@ async def scan_subdomain(
     # CVE lookup + certificate monitoring (best-effort) for this host. Both reuse
     # the shared helpers so the manual and incremental auto-scan stay in lockstep,
     # and both are fully contained: a failure here is logged, not surfaced as a 500.
-    from korug.config import get_settings
     cfg = get_settings()
     try:
         if cfg.enable_cve_scan and res:
