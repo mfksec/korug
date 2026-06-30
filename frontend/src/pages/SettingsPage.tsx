@@ -38,7 +38,10 @@ const RECON_SOURCES: { field: ReconKeyField; name: string; desc: string }[] = [
 
 export function SettingsPage() {
   const theme = useTheme()
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, isAdmin } = useAuth()
+  // API keys + integrations are admin-only (backend-enforced); viewers see just
+  // their profile and scanning preferences.
+  const visibleTabs = TABS.filter((t) => isAdmin || t.key === 'profile' || t.key === 'scanning')
   const [tab, setTab] = useState<Tab>('profile')
   const [toast, setToast] = useState<{ msg: string; sev: 'success' | 'error' }>({ msg: '', sev: 'success' })
   const flash = (msg: string, sev: 'success' | 'error' = 'success') => setToast({ msg, sev })
@@ -153,7 +156,7 @@ export function SettingsPage() {
   return (
     <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
       <Box sx={{ width: 200, flexShrink: 0, position: 'sticky', top: 80 }}>
-        {TABS.map((t) => {
+        {visibleTabs.map((t) => {
           const active = tab === t.key
           return (
             <Box key={t.key} component="button" onClick={() => setTab(t.key)} sx={{
