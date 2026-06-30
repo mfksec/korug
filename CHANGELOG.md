@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-30
+
+### Added
+- **User management UI** (admin only): a Users page to create users, change roles,
+  enable/disable accounts, reset passwords, and delete — wiring the user API that
+  previously had no interface. New admin-only routes and an "Administration" nav
+  group (Users · Audit logs · Settings); the account menu gains a role badge and
+  admin shortcuts. The Phase-B export/search/pagination, empty states, and
+  accessibility work is also included.
+
+### Changed
+- **Frontend RBAC**: viewers no longer see admin-only navigation or controls
+  (Add/Delete domain, Rescan, monitor-mode toggle, API-keys/Integrations settings).
+- **Add-domain dialog** validates the name inline, flags duplicates, and shows API
+  errors in-field.
+
+### Fixed
+- **Access control**: write endpoints now require admin. Previously a "viewer"
+  could create domains, trigger scans, and mutate findings/alerts — only user and
+  integration management was gated. Reads remain open to all authenticated users.
+- **Domain delete returned 500** for any scanned domain (`ForeignKeyViolation`):
+  child rows are now removed first (no `ON DELETE CASCADE` on the FKs).
+- **XLSX export returned 500** for every domain — it used `FileResponse` with an
+  in-memory buffer (which expects a path); now returns a proper `Response`.
+- **Domain-name validation**: the API accepted arbitrary strings (URLs, IPs, free
+  text); `domain_name` is now validated and normalized to a real FQDN.
+
 ## [0.5.0] - 2026-06-30
 
 ### Changed
