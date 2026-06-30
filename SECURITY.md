@@ -4,13 +4,15 @@
 
 **Do not** open a public GitHub issue for security vulnerabilities.
 
-Instead, please email security@amboss.com with:
+Instead, please report privately through **[GitHub's private vulnerability reporting](https://github.com/mfksec/korug/security/advisories/new)** (Security → "Report a vulnerability"). Include:
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
 - Suggested fix (if available)
 
-We will acknowledge your report within 48 hours and provide a detailed response within 5 days.
+If you are unable to use GitHub Security Advisories, open a regular issue asking a maintainer to contact you privately — **without** any vulnerability details — and we will follow up.
+
+We aim to acknowledge your report within 48 hours and provide a detailed response within 5 days.
 
 ## Security Best Practices
 
@@ -40,9 +42,12 @@ We will acknowledge your report within 48 hours and provide a detailed response 
 
 ## Supported Versions
 
+Körüg is pre-1.0 and moving fast; security fixes land on the latest minor release.
+
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | ✅ Yes    |
+| 0.4.x   | ✅ Yes    |
+| < 0.4   | ❌ No     |
 
 ## Known Issues
 
@@ -50,7 +55,7 @@ None currently documented.
 
 ## Security Updates
 
-Security updates will be released as patch versions (e.g., 0.1.1) and announced in the GitHub releases.
+Security updates will be released as patch versions (e.g., 0.4.1) and announced in the GitHub releases.
 
 Subscribe to releases to be notified of security updates:
 1. Go to the repository

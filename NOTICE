@@ -1,0 +1,21 @@
+Körüg
+Copyright 2026 Körüg Contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes and builds upon open-source software and data from the
+security community. Notable third-party components and sources (see the
+Acknowledgements section of README.md for the full list and links):
+
+- can-i-take-over-xyz (EdOverflow and contributors) — subdomain-takeover service
+  fingerprints, licensed CC BY-SA 4.0; Körüg's curated subset is a derivative work
+  shared under the same terms.
+- ProjectDiscovery tools: subfinder, nuclei, tlsx.
+- OWASP Amass; massdns (blechschmidt); masscan (Robert Graham); nmap.
+- Certificate Transparency data via crt.sh and CertSpotter; certstream (Calidog).
+- Cloud bucket enumeration approach inspired by cloud_enum (initstring) and
+  S3Scanner (sa7mon).
+- Vulnerability data from the NVD CVE feed (NIST).
+
+Trademarks and project names belong to their respective owners; listing here does
+not imply endorsement.
