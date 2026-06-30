@@ -6,11 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from korug.db import get_db
-from korug.auth_utils import get_current_user
+from korug.auth_utils import get_current_user, require_role
 from korug.audit import log_audit_event, AuditEvent
 from korug.models import (
     Domain,
+    Subdomain,
     Vulnerability,
+    Certificate,
+    AssetChange,
+    Alert,
     ScanHistory,
     DomainCreate,
     DomainUpdate,
@@ -61,9 +65,9 @@ def create_domain(
     domain: DomainCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_role("admin"))
 ):
-    """Create a new domain to monitor. Discovery starts automatically."""
+    """Create a new domain to monitor (admin only). Discovery starts automatically."""
     # Check if domain already exists
     existing = db.query(Domain).filter(Domain.domain_name == domain.domain_name).first()
     if existing:
@@ -136,11 +140,11 @@ def get_domain(
 @router.put("/{domain_id}", response_model=DomainResponse)
 def update_domain(
     domain_id: int, 
-    domain: DomainUpdate, 
+    domain: DomainUpdate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_role("admin"))
 ):
-    """Update a domain."""
+    """Update a domain (admin only)."""
     db_domain = db.query(Domain).filter(Domain.id == domain_id).first()
     if not db_domain:
         raise HTTPException(
@@ -161,27 +165,50 @@ def update_domain(
 
 @router.delete("/{domain_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_domain(
-    domain_id: int, 
+    domain_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_role("admin"))
 ):
-    """Delete a domain."""
+    """Delete a domain and all of its associated data (admin only).
+
+    Child rows (subdomains, vulnerabilities, certificates, changes, alerts, scan
+    history) are removed first. The FK constraints have no ON DELETE CASCADE, so
+    deleting the domain directly raised a 500 ForeignKeyViolation for any domain
+    that had ever been scanned — we cascade explicitly here instead.
+    """
     domain = db.query(Domain).filter(Domain.id == domain_id).first()
     if not domain:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Domain with id {domain_id} not found",
         )
-    
+
+    domain_name = domain.domain_name
     log_audit_event(
         AuditEvent.DOMAIN_DELETED,
         user=current_user['sub'],
         resource_type="domain",
         resource_id=domain_id,
-        details={"domain_name": domain.domain_name}
+        details={"domain_name": domain_name}
     )
-    
-    db.delete(domain)
-    db.commit()
-    logger.info(f"Domain {domain_id} ({domain.domain_name}) deleted by {current_user['sub']}")
+
+    # Delete children in FK-safe order (alerts -> findings/certs/changes/history
+    # -> subdomains -> domain), then the domain itself, in one transaction.
+    try:
+        db.query(Alert).filter(Alert.domain_id == domain_id).delete(synchronize_session=False)
+        db.query(Vulnerability).filter(Vulnerability.domain_id == domain_id).delete(synchronize_session=False)
+        db.query(Certificate).filter(Certificate.domain_id == domain_id).delete(synchronize_session=False)
+        db.query(AssetChange).filter(AssetChange.domain_id == domain_id).delete(synchronize_session=False)
+        db.query(ScanHistory).filter(ScanHistory.domain_id == domain_id).delete(synchronize_session=False)
+        db.query(Subdomain).filter(Subdomain.domain_id == domain_id).delete(synchronize_session=False)
+        db.query(Domain).filter(Domain.id == domain_id).delete(synchronize_session=False)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to delete domain {domain_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete domain",
+        )
+    logger.info(f"Domain {domain_id} ({domain_name}) deleted by {current_user['sub']}")
     return None

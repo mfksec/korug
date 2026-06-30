@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from korug.db import get_db
-from korug.auth_utils import get_current_user
+from korug.auth_utils import get_current_user, require_role
 from korug.audit import log_audit_event, AuditEvent
 from korug.models import Alert, Domain
 
@@ -104,7 +104,7 @@ def get_alert(
 def resolve_alert(
     alert_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
     """Mark an alert as resolved."""
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
@@ -126,7 +126,7 @@ def resolve_alert(
 def unresolve_alert(
     alert_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
     """Mark a resolved alert as unresolved."""
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
@@ -177,7 +177,7 @@ def get_alert_stats(
 def delete_alert(
     alert_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
     """Delete an alert."""
     alert = db.query(Alert).filter(Alert.id == alert_id).first()

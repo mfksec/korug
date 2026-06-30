@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from korug.db import get_db
 from korug.config import get_settings
-from korug.auth_utils import get_current_user
+from korug.auth_utils import get_current_user, require_role
 from korug.audit import log_audit_event, AuditEvent
 from korug.models import (
     Domain,
@@ -828,7 +828,7 @@ def trigger_scan(
     background_tasks: BackgroundTasks,
     port_scan: bool | None = Query(None, description="Override the port-scan default for this run"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_role("admin"))
 ):
     """Trigger a scan for a domain. Set ?port_scan=true to include a port scan."""
     domain = db.query(Domain).filter(Domain.id == domain_id).first()
@@ -908,7 +908,7 @@ def get_scan_status(
 def cancel_scan(
     domain_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
     """Request cancellation of the in-progress scan for a domain.
 
@@ -1013,7 +1013,7 @@ async def scan_subdomain(
     subdomain_id: int,
     port_scan: bool | None = Query(None, description="Include a port scan for this host"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
     """Re-scan a single subdomain: refresh DNS/HTTP/tech/ports + takeover check.
 
@@ -1155,7 +1155,7 @@ def get_subdomain_detail(
 async def refresh_subdomain_certificates(
     subdomain_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
     """Re-fetch certificates from crt.sh for one host and upsert them.
 

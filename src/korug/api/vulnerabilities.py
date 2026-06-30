@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from korug.db import get_db
-from korug.auth_utils import get_current_user
+from korug.auth_utils import get_current_user, require_role
 from korug.audit import log_audit_event, AuditEvent
 from korug.models import Vulnerability, VulnerabilityUpdate, VulnerabilityResponse
 
@@ -59,9 +59,9 @@ def update_vulnerability(
     vuln_id: int,
     update: VulnerabilityUpdate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
-    """Update vulnerability (mark as false positive, etc.)."""
+    """Update vulnerability (mark as false positive, etc.) — admin only."""
     vuln = db.query(Vulnerability).filter(Vulnerability.id == vuln_id).first()
     if not vuln:
         raise HTTPException(
@@ -92,11 +92,11 @@ def update_vulnerability(
 
 @router.delete("/{vuln_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_vulnerability(
-    vuln_id: int, 
+    vuln_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
-    """Delete a vulnerability record."""
+    """Delete a vulnerability record (admin only)."""
     vuln = db.query(Vulnerability).filter(Vulnerability.id == vuln_id).first()
     if not vuln:
         raise HTTPException(

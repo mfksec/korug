@@ -1,7 +1,28 @@
+import re
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
+
+
+# A registrable hostname: dot-separated labels, an alphabetic TLD (so bare IPs,
+# URLs, and free text are rejected). Total length capped at 253.
+_DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+)
+
+
+def normalize_domain_name(value: str) -> str:
+    """Normalize and validate a domain name; raise ValueError if it's not a FQDN.
+
+    Forgiving on input — strips a pasted scheme/path/port — and returns a bare
+    lowercase hostname like ``example.com``.
+    """
+    v = (value or "").strip().lower()
+    v = v.split("://")[-1].split("/")[0].split("?")[0].split(":")[0].rstrip(".")
+    if not _DOMAIN_RE.match(v):
+        raise ValueError("Enter a valid domain name, e.g. example.com")
+    return v
 
 
 # User / Auth Schemas
@@ -92,11 +113,21 @@ class DomainCreate(BaseModel):
     domain_name: str = Field(..., min_length=1, max_length=255)
     monitor_mode: str = Field(default="active", pattern="^(active|passive)$")
 
+    @field_validator("domain_name")
+    @classmethod
+    def _validate_domain(cls, v: str) -> str:
+        return normalize_domain_name(v)
+
 
 class DomainUpdate(BaseModel):
     domain_name: Optional[str] = None
     enabled: Optional[bool] = None
     monitor_mode: Optional[str] = Field(default=None, pattern="^(active|passive)$")
+
+    @field_validator("domain_name")
+    @classmethod
+    def _validate_domain(cls, v: Optional[str]) -> Optional[str]:
+        return normalize_domain_name(v) if v is not None else v
 
 
 class DomainResponse(BaseModel):

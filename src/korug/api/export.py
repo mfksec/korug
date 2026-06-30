@@ -1,10 +1,10 @@
 """Data export API endpoints."""
 import json
 import logging
+import re
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 import openpyxl
 from openpyxl.styles import Font, PatternFill
@@ -113,11 +113,13 @@ def export_to_xlsx(
     ws_vulns.column_dimensions["E"].width = 25
     ws_vulns.column_dimensions["F"].width = 15
     
-    # Save to bytes
+    # Serialize the workbook to bytes and return it as the response body.
+    # (FileResponse expects a path on disk — passing it an in-memory buffer
+    # raised a 500 for every export, regardless of whether the domain had data.)
     output = BytesIO()
     wb.save(output)
-    output.seek(0)
-    
+    data = output.getvalue()
+
     log_audit_event(
         AuditEvent.EXPORT_INITIATED,
         user=current_user['sub'],
@@ -125,9 +127,11 @@ def export_to_xlsx(
         resource_id=domain_id,
         details={"domain_name": domain.domain_name, "format": "xlsx"}
     )
-    
-    return FileResponse(
-        iter([output.getvalue()]),
+
+    # Sanitize the domain name for the download filename (it's user-supplied).
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", domain.domain_name) or "domain"
+    return Response(
+        content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={domain.domain_name}_report.xlsx"},
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}_report.xlsx"'},
     )
