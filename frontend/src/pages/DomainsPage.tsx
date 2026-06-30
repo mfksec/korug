@@ -11,15 +11,21 @@ import PublicOutlined from '@mui/icons-material/PublicOutlined'
 import { FONT_MONO } from '@/styles/theme'
 import { SearchField, Segmented, RiskChip, EmptyState } from '@/components/common/Widgets'
 import { fetchDomains, createDomain, deleteDomain } from '@/data/apiAdapters'
+import { useAuth } from '@/hooks/useAuth'
 import { apiErrorMessage } from '@/utils/apiError'
 import { Domain, RiskLevel } from '@/types/domain'
 
 type SortCol = 'domain_name' | 'subdomain_count' | 'open_vulnerabilities' | 'risk'
 const riskRank: Record<RiskLevel, number> = { high: 3, medium: 2, low: 1, none: 0 }
+// Mirror of the backend FQDN check so we can validate inline before POSTing.
+const DOMAIN_RE = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
+const normalizeDomain = (v: string) =>
+  v.trim().toLowerCase().split('://').pop()!.split('/')[0].split('?')[0].split(':')[0].replace(/\.$/, '')
 
 export function DomainsPage() {
   const theme = useTheme()
   const navigate = useNavigate()
+  const { isAdmin } = useAuth()
   const [domains, setDomains] = useState<Domain[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -29,6 +35,7 @@ export function DomainsPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [addValue, setAddValue] = useState('')
   const [addMode, setAddMode] = useState<'active' | 'passive'>('active')
+  const [addError, setAddError] = useState('')
   const [toast, setToast] = useState('')
 
   const load = useCallback(async () => {
@@ -61,16 +68,26 @@ export function DomainsPage() {
     else { setSortBy(col); setDir(col === 'domain_name' ? 'asc' : 'desc') }
   }
 
+  const openAdd = () => { setAddError(''); setAddValue(''); setAddMode('active'); setAddOpen(true) }
+
   const addDomain = async () => {
-    const name = addValue.trim()
-    if (!name) return
+    const name = normalizeDomain(addValue)
+    if (!DOMAIN_RE.test(name)) {
+      setAddError('Enter a valid domain name, e.g. example.com')
+      return
+    }
+    if (domains.some((d) => d.domain_name === name)) {
+      setAddError(`${name} is already being monitored`)
+      return
+    }
+    setAddError('')
     try {
       await createDomain(name, addMode)
       setAddOpen(false); setAddValue(''); setAddMode('active')
       setToast(`Added ${name} — ${addMode} discovery started`)
       load()
     } catch (err) {
-      setToast(apiErrorMessage(err, 'Failed to add domain'))
+      setAddError(apiErrorMessage(err, 'Failed to add domain'))
     }
   }
 
@@ -96,7 +113,7 @@ export function DomainsPage() {
         <SearchField value={search} onChange={setSearch} placeholder="Search domains…" sx={{ flex: 1, minWidth: 240, maxWidth: 360 }} />
         <Segmented value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'active', label: 'Active' }, { value: 'issues', label: 'With issues' }, { value: 'high', label: 'High risk' }]} />
         <Box sx={{ flex: 1 }} />
-        <Button variant="contained" color="primary" startIcon={<AddOutlined />} onClick={() => setAddOpen(true)}>Add domain</Button>
+        {isAdmin && <Button variant="contained" color="primary" startIcon={<AddOutlined />} onClick={openAdd}>Add domain</Button>}
       </Box>
 
       {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
@@ -107,7 +124,7 @@ export function DomainsPage() {
             icon={<PublicOutlined />}
             title="No domains yet"
             description="Add your first domain and Körüg will start discovering its attack surface across every enabled source."
-            action={<Button variant="contained" color="primary" startIcon={<AddOutlined />} onClick={() => setAddOpen(true)}>Add domain</Button>}
+            action={isAdmin ? <Button variant="contained" color="primary" startIcon={<AddOutlined />} onClick={openAdd}>Add domain</Button> : undefined}
           />
         ) : (
           <EmptyState icon={<PublicOutlined />} title="No domains match your filters" description="Try a different search term or filter." />
@@ -143,9 +160,11 @@ export function DomainsPage() {
                   <TableCell><RiskChip risk={d.risk} /></TableCell>
                   <TableCell sx={{ fontSize: 13, color: 'text.secondary', whiteSpace: 'nowrap' }}>{d.last_scanned}</TableCell>
                   <TableCell align="right">
-                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); removeDomain(d.id) }} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: theme.palette.error.main.replace('rgb(', 'rgba(').replace(')', ',0.12)') } }}>
-                      <DeleteOutline sx={{ fontSize: 18 }} />
-                    </IconButton>
+                    {isAdmin && (
+                      <IconButton size="small" aria-label={`Delete ${d.domain_name}`} onClick={(e) => { e.stopPropagation(); removeDomain(d.id) }} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: theme.palette.error.main.replace('rgb(', 'rgba(').replace(')', ',0.12)') } }}>
+                        <DeleteOutline sx={{ fontSize: 18 }} />
+                      </IconButton>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -160,7 +179,11 @@ export function DomainsPage() {
         <DialogContent>
           <Typography sx={{ fontSize: 13, color: 'text.disabled', mb: 2 }}>Körüg will begin discovering subdomains across all enabled sources immediately.</Typography>
           <TextField
-            autoFocus fullWidth value={addValue} onChange={(e) => setAddValue(e.target.value)} placeholder="example.com"
+            autoFocus fullWidth value={addValue}
+            onChange={(e) => { setAddValue(e.target.value); if (addError) setAddError('') }}
+            onKeyDown={(e) => { if (e.key === 'Enter') addDomain() }}
+            placeholder="example.com"
+            error={!!addError} helperText={addError || ' '}
             InputProps={{ startAdornment: <InputAdornment position="start"><PublicOutlined sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment>, sx: { fontFamily: FONT_MONO } }}
           />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2 }}>

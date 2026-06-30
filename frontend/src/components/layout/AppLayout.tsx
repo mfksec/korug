@@ -15,6 +15,7 @@ import TimelineOutlined from '@mui/icons-material/TimelineOutlined'
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
 import ShieldOutlined from '@mui/icons-material/ShieldOutlined'
 import RadarOutlined from '@mui/icons-material/RadarOutlined'
+import GroupOutlined from '@mui/icons-material/GroupOutlined'
 import SearchOutlined from '@mui/icons-material/SearchOutlined'
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined'
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined'
@@ -27,25 +28,32 @@ import { scanAPI } from '@/api/scans'
 
 const DRAWER_WIDTH = 236
 
-const NAV = [
+const MONITORING = [
   { label: 'Dashboard', path: '/dashboard', icon: <SpaceDashboardOutlined /> },
   { label: 'Domains', path: '/domains', icon: <PublicOutlined /> },
   { label: 'Assets', path: '/assets', icon: <DnsOutlined /> },
   { label: 'Changes', path: '/changes', icon: <TimelineOutlined /> },
   { label: 'Vulnerabilities', path: '/vulnerabilities', icon: <GppMaybeOutlined /> },
   { label: 'Alerts', path: '/alerts', icon: <NotificationsNoneOutlined /> },
+]
+
+// Administration group — admin-only (gated in the nav + by route guards).
+const ADMINISTRATION = [
+  { label: 'Users', path: '/users', icon: <GroupOutlined /> },
   { label: 'Audit logs', path: '/audit-logs', icon: <ReceiptLongOutlined /> },
   { label: 'Settings', path: '/settings', icon: <SettingsOutlined /> },
 ]
 
-const TITLES: Record<string, string> = Object.fromEntries(NAV.map((n) => [n.path, n.label]))
+const TITLES: Record<string, string> = Object.fromEntries(
+  [...MONITORING, ...ADMINISTRATION].map((n) => [n.path, n.label]),
+)
 
 export function AppLayout() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const { mode, toggle } = useColorMode()
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [activeAlerts, setActiveAlerts] = useState(0)
   const [activeScans, setActiveScans] = useState(0)
@@ -120,31 +128,40 @@ export function AppLayout() {
           </Box>
         </Box>
 
-        <Typography sx={{ px: 2.7, pt: 2, pb: 1, fontSize: 10.5, fontWeight: 700, letterSpacing: '.8px', textTransform: 'uppercase', color: sb.text, opacity: 0.7 }}>Monitoring</Typography>
-        <List component="nav" aria-label="Primary navigation" sx={{ px: 1.2, flex: 1 }}>
-          {NAV.map((item) => {
-            const active = isActive(item.path)
-            const badge = item.path === '/alerts' && activeAlerts > 0 ? activeAlerts : null
-            return (
-              <ListItemButton
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                sx={{
-                  borderRadius: 1.75, mb: 0.3, py: 1.1, color: active ? sb.textActive : sb.text,
-                  bgcolor: active ? sb.activeBg : 'transparent',
-                  boxShadow: active ? `inset 3px 0 0 ${theme.palette.brand.main}` : 'none',
-                  '&:hover': { bgcolor: sb.activeBg, color: sb.textActive },
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 32, color: 'inherit', '& svg': { fontSize: 19 } }}>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13.5, fontWeight: active ? 700 : 500 }} />
-                {badge != null && (
-                  <Chip label={badge} size="small" sx={{ height: 20, fontFamily: FONT_MONO, fontWeight: 700, fontSize: 11, bgcolor: theme.palette.error.main, color: '#fff' }} />
-                )}
-              </ListItemButton>
-            )
-          })}
-        </List>
+        <Box component="nav" aria-label="Primary navigation" sx={{ flex: 1, overflowY: 'auto' }}>
+          {[
+            { heading: 'Monitoring', items: MONITORING, show: true },
+            { heading: 'Administration', items: ADMINISTRATION, show: isAdmin },
+          ].filter((g) => g.show).map((group) => (
+            <Box key={group.heading}>
+              <Typography sx={{ px: 2.7, pt: 2, pb: 1, fontSize: 10.5, fontWeight: 700, letterSpacing: '.8px', textTransform: 'uppercase', color: sb.text, opacity: 0.7 }}>{group.heading}</Typography>
+              <List sx={{ px: 1.2 }}>
+                {group.items.map((item) => {
+                  const active = isActive(item.path)
+                  const badge = item.path === '/alerts' && activeAlerts > 0 ? activeAlerts : null
+                  return (
+                    <ListItemButton
+                      key={item.path}
+                      onClick={() => navigate(item.path)}
+                      sx={{
+                        borderRadius: 1.75, mb: 0.3, py: 1.1, color: active ? sb.textActive : sb.text,
+                        bgcolor: active ? sb.activeBg : 'transparent',
+                        boxShadow: active ? `inset 3px 0 0 ${theme.palette.brand.main}` : 'none',
+                        '&:hover': { bgcolor: sb.activeBg, color: sb.textActive },
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 32, color: 'inherit', '& svg': { fontSize: 19 } }}>{item.icon}</ListItemIcon>
+                      <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13.5, fontWeight: active ? 700 : 500 }} />
+                      {badge != null && (
+                        <Chip label={badge} size="small" sx={{ height: 20, fontFamily: FONT_MONO, fontWeight: 700, fontSize: 11, bgcolor: theme.palette.error.main, color: '#fff' }} />
+                      )}
+                    </ListItemButton>
+                  )
+                })}
+              </List>
+            </Box>
+          ))}
+        </Box>
 
         {/* Live scan status (only while a discovery is running) */}
         {activeScans > 0 && (
@@ -204,8 +221,15 @@ export function AppLayout() {
               <Box sx={{ px: 2, py: 1, minWidth: 200 }}>
                 <Typography sx={{ fontWeight: 700, fontSize: 14 }}>{user?.username}</Typography>
                 <Typography sx={{ fontSize: 12, color: 'text.disabled' }}>{user?.email}</Typography>
+                <Box sx={{ mt: 0.6 }}><Chip label={isAdmin ? 'Administrator' : 'Viewer'} size="small" sx={{ height: 20, fontWeight: 700, fontSize: 11 }} /></Box>
               </Box>
               <Divider />
+              {isAdmin && (
+                <MenuItem onClick={() => { setAnchorEl(null); navigate('/users') }}><GroupOutlined sx={{ fontSize: 18, mr: 1.5 }} />Users</MenuItem>
+              )}
+              {isAdmin && (
+                <MenuItem onClick={() => { setAnchorEl(null); navigate('/audit-logs') }}><ReceiptLongOutlined sx={{ fontSize: 18, mr: 1.5 }} />Audit logs</MenuItem>
+              )}
               <MenuItem onClick={() => { setAnchorEl(null); navigate('/settings') }}><SettingsOutlined sx={{ fontSize: 18, mr: 1.5 }} />Settings</MenuItem>
               <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}><LogoutOutlined sx={{ fontSize: 18, mr: 1.5 }} />Sign out</MenuItem>
             </Menu>

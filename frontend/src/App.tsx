@@ -4,6 +4,7 @@ import { ThemeProvider, CssBaseline } from '@mui/material'
 import { useAuth } from '@/hooks/useAuth'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { ProtectedRoute } from '@/components/routing/ProtectedRoute'
+import { AdminRoute } from '@/components/routing/AdminRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { createAppTheme, ColorModeContext, AppMode, MODE_STORAGE_KEY } from '@/styles/theme'
 import { LoginPage } from './pages/LoginPage'
@@ -17,6 +18,7 @@ import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { AuditLogsPage } from './pages/AuditLogsPage'
+import { UsersPage } from './pages/UsersPage'
 import { NotFound } from './pages/NotFound'
 
 function ThemeModeProvider({ children }: { children: ReactNode }) {
@@ -73,7 +75,9 @@ function App() {
               <Route path="/changes" element={<ChangesPage />} />
               <Route path="/vulnerabilities" element={<VulnerabilitiesPage />} />
               <Route path="/alerts" element={<AlertsPage />} />
-              <Route path="/audit-logs" element={<AuditLogsPage />} />
+              {/* Admin-only administration pages */}
+              <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+              <Route path="/audit-logs" element={<AdminRoute><AuditLogsPage /></AdminRoute>} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
 
