@@ -57,32 +57,7 @@ def ip_in_cidrs(ip: str, cidrs: List[str]) -> bool:
     return False
 
 
-def _parse_nmap_xml(xml_str: str) -> List[dict]:
-    """Parse nmap -oX output into a list of open-port dicts."""
-    ports: List[dict] = []
-    if not xml_str:
-        return ports
-    try:
-        # defusedxml guards against XXE / billion-laughs in untrusted XML.
-        from defusedxml.ElementTree import fromstring
-        root = fromstring(xml_str)
-    except Exception:
-        return ports
-    for port in root.findall(".//host/ports/port"):
-        state = port.find("state")
-        if state is None or state.get("state") != "open":
-            continue
-        entry = {"port": int(port.get("portid")), "proto": port.get("protocol")}
-        svc = port.find("service")
-        if svc is not None:
-            if svc.get("name"):
-                entry["service"] = svc.get("name")
-            if svc.get("product"):
-                entry["product"] = svc.get("product")
-            if svc.get("version"):
-                entry["version"] = svc.get("version")
-        ports.append(entry)
-    return sorted(ports, key=lambda d: d["port"])
+from korug.services.port_scan import parse_nmap_xml as _parse_nmap_xml
 
 
 def detect_technologies(headers: dict, body: str) -> List[str]:
@@ -284,10 +259,17 @@ class EnrichmentService:
                 continue  # try next scheme (smart https->http fallback)
 
     async def _scan_ports(self, host: str) -> List[dict]:
-        """Port scan a host. Prefer nmap (service/version), else async TCP connect.
+        """Port scan a host. Prefer masscan->nmap (fast wide sweep + service
+        detection) when enabled, then nmap alone, else async TCP connect.
 
         Returns a list of dicts: {port, service?, product?, version?}.
         """
+        if settings.enable_masscan and shutil.which(settings.masscan_path):
+            from korug.services import port_scan
+            ports = await port_scan.discover_and_detect(host)
+            if ports:
+                return ports
+            # masscan found nothing / was unprivileged — fall through to nmap/TCP.
         if shutil.which(settings.nmap_path):
             try:
                 return await asyncio.to_thread(self._nmap_scan, host)

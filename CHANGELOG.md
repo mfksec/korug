@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Active TLS/SSL configuration audit with tlsx** (opt-in, `ENABLE_TLS_AUDIT`): audits
+  the certificate and protocol a host actually serves over the incremental alive host
+  set of **active**-mode domains, host-scope-gated exactly like nuclei. Flags expired /
+  self-signed / hostname-mismatched / untrusted certs, deprecated protocol versions
+  (SSLv3, TLS 1.0/1.1), and weak cipher suites as `tls:<issue>` vulnerabilities
+  (higher-confidence problems also raise alerts). Distinct from the passive crt.sh
+  certificate monitoring. Fully fault-isolated.
+- **masscan → nmap port-scan pipeline** (opt-in, `ENABLE_MASSCAN`): a fast wide-range
+  masscan sweep finds open ports, then nmap does service/version detection on just
+  those — far faster than a wide nmap scan. Becomes the preferred port-scan engine when
+  enabled, falling back to nmap alone or the built-in TCP-connect scan when masscan is
+  missing or unprivileged. Honours the same IP-level scope gate (never scans shared CDN
+  IPs; respects declared owned ranges).
+- **Subdomain brute-force with massdns** (opt-in, `ENABLE_MASSDNS`): resolves
+  `<word>.<domain>` candidates from an operator-supplied wordlist against a resolvers
+  file at high speed; resolving names join discovery as the `massdns` source. Disabled
+  unless both `MASSDNS_WORDLIST` and `MASSDNS_RESOLVERS` are configured.
+- **Cloud bucket enumeration** (opt-in, `ENABLE_BUCKET_ENUM`): probes well-known AWS S3,
+  GCS, and Azure Blob endpoints for bucket/account names derived from the domain
+  keyword. Runs in **active** mode only; a publicly-listable bucket is recorded as a
+  `bucket:<provider>:public:<name>` finding and alerted. Native HTTP probes — no external
+  binary or credentials. Findings attach to the apex host.
+
 ## [0.4.0] - 2026-06-28
 
 ### Added

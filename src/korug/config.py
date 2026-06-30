@@ -81,6 +81,22 @@ class Settings(BaseSettings):
     nuclei_rate_limit: int = Field(default=150)        # requests/sec cap (nuclei -rate-limit)
     nuclei_timeout: int = Field(default=900)           # overall subprocess timeout (seconds)
 
+    # tlsx (active TLS/SSL configuration audit). Opt-in: requires the tlsx CLI,
+    # runs only for domains in "active" monitor mode over the incremental
+    # (new/changed alive) host set, and is host-scope-gated like nuclei. Reports
+    # expired/self-signed/mismatched/untrusted certs, deprecated TLS versions, and
+    # weak ciphers. Active (opens TLS connections) — authorized targets only.
+    enable_tls_audit: bool = Field(default=False)
+    tlsx_path: str = Field(default="tlsx")
+    tls_expiry_warning_days: int = Field(default=14)   # flag certs expiring within N days
+    tlsx_timeout: int = Field(default=300)             # overall subprocess timeout (seconds)
+
+    # Cloud bucket enumeration (AWS S3 / GCS / Azure Blob). Opt-in: probes
+    # well-known public storage endpoints for names derived from the domain
+    # keyword. No external binary or credentials needed. Active recon — runs only
+    # for domains in "active" monitor mode. A publicly-listable bucket is alerted.
+    enable_bucket_enum: bool = Field(default=False)
+
     # certstream live Certificate Transparency monitoring. Opt-in background
     # consumer: new certs for monitored domains surface as discovered assets in
     # near real-time. The public Calidog server can be flaky; point at a self-host
@@ -97,12 +113,32 @@ class Settings(BaseSettings):
     enable_http_probe: bool = Field(default=True)      # status/title/tech via HTTP(S)
     enable_subfinder: bool = Field(default=True)       # local subfinder CLI (fast, productive)
     enable_amass: bool = Field(default=False)          # local amass CLI (slow; opt-in, best with API keys)
+
+    # massdns active DNS brute-force (discovery source). Opt-in: needs the massdns
+    # CLI plus an operator-supplied wordlist and resolvers file — disabled unless
+    # both paths are set. Active (generates DNS queries for guessed names).
+    enable_massdns: bool = Field(default=False)
+    massdns_path: str = Field(default="massdns")
+    massdns_wordlist: str = Field(default="")          # path to a subdomain wordlist (required)
+    massdns_resolvers: str = Field(default="")         # path to a resolvers file (required)
+    massdns_timeout: int = Field(default=600)          # overall subprocess timeout (seconds)
     enable_port_scan: bool = Field(default=False)      # active port scan (opt-in default)
     port_scan_ports: str = Field(default="21,22,25,53,80,110,143,443,445,3306,3389,5432,6379,8080,8443")
     enrichment_concurrency: int = Field(default=50)    # max concurrent probes/resolves
     http_probe_timeout: int = Field(default=8)         # seconds per probe
     nmap_path: str = Field(default="nmap")             # used for port scan when available
     nmap_service_detection: bool = Field(default=True) # nmap -sV (service/version)
+
+    # masscan -> nmap pipeline (fast wide-range port discovery, then service
+    # detection on the open ports). Opt-in: masscan needs raw-socket privilege
+    # (root / CAP_NET_RAW); when unavailable the port scan falls back to the
+    # nmap/TCP-connect path above. Active + IP-level intrusive — gated on
+    # IP-ownership (never scans CDN IPs; honours declared owned ranges).
+    enable_masscan: bool = Field(default=False)
+    masscan_path: str = Field(default="masscan")
+    masscan_ports: str = Field(default="1-65535")      # masscan sweeps a wide range fast
+    masscan_rate: int = Field(default=1000)            # packets/sec (masscan --rate)
+    masscan_timeout: int = Field(default=600)          # overall subprocess timeout (seconds)
     
     # AWS
     aws_region: str = Field(default="us-east-1")

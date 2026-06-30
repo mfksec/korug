@@ -26,6 +26,8 @@ from korug.services import cve as cve_service
 from korug.services import certificates as cert_service
 from korug.services import changes as change_service
 from korug.services import nuclei as nuclei_service
+from korug.services import tls_audit as tls_audit_service
+from korug.services import bucket_enum as bucket_enum_service
 from korug.services import scope as scope_service
 
 logger = logging.getLogger(__name__)
@@ -339,6 +341,181 @@ async def _run_nuclei(db: Session, scan, incremental_ids: list[int], enriched: d
     return new_vulns
 
 
+async def _run_tls_audit(db: Session, scan, incremental_ids: list[int], enriched: dict,
+                         *, owned_cidrs: list[str] | None = None,
+                         monitored_apexes: list[str] | None = None,
+                         enforce_scope: bool = False) -> int:
+    """Active TLS/SSL configuration audit (tlsx) over the incremental alive host set.
+
+    Opt-in (``enable_tls_audit``) and caller-gated to active monitor mode. Uses the
+    same host-level scope gate as nuclei (``host_active_allowed``): only hosts that
+    are ours by name and not hosted on a third-party app service are audited. tlsx
+    runs once over the batch (it parallelizes internally). Fully fault-isolated.
+    Returns the count of newly-created findings.
+    """
+    cfg = get_settings()
+    if not cfg.enable_tls_audit or not incremental_ids:
+        return 0
+
+    host_to_id: dict[str, int] = {}
+    hosts: list[str] = []
+    skipped = 0
+    for sub_id in incremental_ids:
+        sub = db.query(Subdomain).filter(Subdomain.id == sub_id).first()
+        if not sub:
+            continue
+        res = enriched.get(sub.subdomain)
+        if not (res and res.is_alive):
+            continue
+        if enforce_scope:
+            verdict = scope_service.classify(
+                sub.subdomain, list(res.resolved_ips), res.dns_records.get("CNAME"),
+                owned_cidrs=owned_cidrs, monitored_apexes=monitored_apexes,
+            )
+            if not verdict["host_active_allowed"]:
+                skipped += 1
+                continue
+        host_to_id[sub.subdomain.lower()] = sub.id
+        hosts.append(sub.subdomain)
+
+    if skipped:
+        logger.info("tlsx: skipped %d out-of-scope host(s)", skipped)
+    if not hosts:
+        return 0
+
+    try:
+        records = await tls_audit_service.scan(hosts)
+    except Exception as e:
+        logger.warning("tlsx audit failed (continuing): %s", e)
+        return 0
+
+    new_vulns = 0
+    try:
+        for rec in records:
+            sub_id = host_to_id.get((rec.get("host") or "").lower())
+            if not sub_id:
+                continue
+            sub = db.query(Subdomain).filter(Subdomain.id == sub_id).first()
+            if not sub:
+                continue
+            for finding in tls_audit_service.assess(
+                rec, expiry_warning_days=cfg.tls_expiry_warning_days
+            ):
+                vuln_type = f"tls:{finding['issue']}"[:100]
+                score = float(finding["severity_confidence"])
+                details = json.dumps({
+                    "category": "tls",
+                    "issue": finding["issue"],
+                    "tls_version": rec.get("tls_version"),
+                    "cipher": rec.get("cipher"),
+                    "not_after": rec.get("not_after"),
+                    "message": f"{sub.subdomain}: {finding['message']}",
+                })
+                existing = db.query(Vulnerability).filter(
+                    Vulnerability.subdomain_id == sub.id,
+                    Vulnerability.vuln_type == vuln_type,
+                ).first()
+                if existing:
+                    existing.confidence_score = score
+                    existing.details = details
+                    db.add(existing)
+                    continue
+                new_vulns += 1
+                db_vuln = Vulnerability(
+                    subdomain_id=sub.id, domain_id=sub.domain_id,
+                    vuln_type=vuln_type, confidence_score=score, details=details,
+                )
+                db.add(db_vuln)
+                db.flush()
+                # Alert on the higher-confidence TLS problems only.
+                if score >= 70:
+                    db.add(Alert(
+                        domain_id=sub.domain_id, vulnerability_id=db_vuln.id, target=sub.subdomain,
+                        alert_type="tls", severity=_severity_from_confidence(score),
+                        message=f"{sub.subdomain}: {finding['message']}",
+                    ))
+        db.commit()
+    except Exception as e:
+        logger.warning("Persisting tlsx findings failed (continuing): %s", e)
+        db.rollback()
+        return 0
+    return new_vulns
+
+
+async def _run_bucket_enum(db: Session, domain: Domain) -> int:
+    """Cloud bucket enumeration for a domain (S3 / GCS / Azure).
+
+    Opt-in (``enable_bucket_enum``) and caller-gated to active monitor mode.
+    Findings are domain-level (a bucket isn't a subdomain), so they attach to the
+    apex host row. Fully fault-isolated. Returns the count of newly-created findings.
+    """
+    cfg = get_settings()
+    if not cfg.enable_bucket_enum:
+        return 0
+    try:
+        findings = await bucket_enum_service.enumerate_buckets(domain.domain_name)
+    except Exception as e:
+        logger.warning("bucket enum failed for %s (continuing): %s", domain.domain_name, e)
+        return 0
+    if not findings:
+        return 0
+
+    # Attach to the apex host (stored as a subdomain via the "seed" source).
+    apex = db.query(Subdomain).filter(
+        Subdomain.domain_id == domain.id,
+        Subdomain.subdomain == domain.domain_name,
+    ).first()
+    if not apex:
+        logger.info("bucket enum: no apex host row for %s — skipping persistence", domain.domain_name)
+        return 0
+
+    new_vulns = 0
+    try:
+        for f in findings:
+            # A public listing is the real exposure; an existing-but-private bucket
+            # is lower-confidence intel worth recording.
+            public = bool(f["public"])
+            vuln_type = f"bucket:{f['provider']}:{'public' if public else 'exists'}:{f['bucket']}"[:100]
+            score = 90.0 if public else 40.0
+            msg = (f"{'Public' if public else 'Existing'} {f['provider'].upper()} bucket "
+                   f"{f['bucket']} ({f['url']})")
+            details = json.dumps({
+                "category": "bucket",
+                "provider": f["provider"],
+                "bucket": f["bucket"],
+                "url": f["url"],
+                "public": public,
+                "message": msg,
+            })
+            existing = db.query(Vulnerability).filter(
+                Vulnerability.subdomain_id == apex.id,
+                Vulnerability.vuln_type == vuln_type,
+            ).first()
+            if existing:
+                existing.confidence_score = score
+                existing.details = details
+                db.add(existing)
+                continue
+            new_vulns += 1
+            db_vuln = Vulnerability(
+                subdomain_id=apex.id, domain_id=domain.id,
+                vuln_type=vuln_type, confidence_score=score, details=details,
+            )
+            db.add(db_vuln)
+            db.flush()
+            if public:
+                db.add(Alert(
+                    domain_id=domain.id, vulnerability_id=db_vuln.id, target=domain.domain_name,
+                    alert_type="bucket", severity=_severity_from_confidence(score), message=msg,
+                ))
+        db.commit()
+    except Exception as e:
+        logger.warning("Persisting bucket findings failed for %s (continuing): %s", domain.domain_name, e)
+        db.rollback()
+        return 0
+    return new_vulns
+
+
 # Scan lifecycle states. A scan moves running -> completed/failed, or a cancel
 # request flips running -> cancelling, which the background task observes
 # cooperatively and finalizes as cancelled.
@@ -570,6 +747,15 @@ async def perform_scan(domain_id: int, db: Session, port_scan: bool | None = Non
                     owned_cidrs=owned_cidrs, monitored_apexes=monitored_apexes,
                     enforce_scope=enforce_scope,
                 )
+                # Active TLS/SSL configuration audit (tlsx) — same active-mode,
+                # opt-in, host-scope-gated discipline as nuclei.
+                vulnerabilities_found += await _run_tls_audit(
+                    db, scan, incremental_ids, enriched,
+                    owned_cidrs=owned_cidrs, monitored_apexes=monitored_apexes,
+                    enforce_scope=enforce_scope,
+                )
+                # Cloud bucket enumeration (domain-level, S3/GCS/Azure) — opt-in.
+                vulnerabilities_found += await _run_bucket_enum(db, domain)
 
             # Gone-tracking: names present in a prior scan but absent from this
             # one (last_seen older than this scan) are flagged gone + logged once.
