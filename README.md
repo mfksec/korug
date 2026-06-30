@@ -6,8 +6,6 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/mfksec/korug/actions/workflows/test.yml"><img src="https://github.com/mfksec/korug/actions/workflows/test.yml/badge.svg" alt="Tests" /></a>
-    <a href="https://github.com/mfksec/korug/actions/workflows/lint.yml"><img src="https://github.com/mfksec/korug/actions/workflows/lint.yml/badge.svg" alt="Lint" /></a>
     <img src="https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square" alt="Python 3.11+" />
     <a href="LICENSE"><img src="https://img.shields.io/github/license/mfksec/korug?style=flat-square" alt="License: Apache-2.0" /></a>
     <a href="https://github.com/mfksec/korug/releases"><img src="https://img.shields.io/github/v/release/mfksec/korug?style=flat-square&include_prereleases" alt="Release" /></a>

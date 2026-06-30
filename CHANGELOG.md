@@ -7,14 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-30
+
 ### Changed
 - **Relicensed from MIT to Apache-2.0** — adds an explicit patent grant and
   trademark clause; added a `NOTICE` file consolidating third-party attribution.
 
 ### Added
 - **Project hygiene for public release**: `CODE_OF_CONDUCT.md` (Contributor
-  Covenant 2.1), `ROADMAP.md`, and GitHub Actions CI (tests across Python
-  3.11/3.12, lint, and Docker image publishing to GHCR on tagged releases).
+  Covenant 2.1), `ROADMAP.md`, and a `.flake8` config.
 - **Active TLS/SSL configuration audit with tlsx** (opt-in, `ENABLE_TLS_AUDIT`): audits
   the certificate and protocol a host actually serves over the incremental alive host
   set of **active**-mode domains, host-scope-gated exactly like nuclei. Flags expired /
