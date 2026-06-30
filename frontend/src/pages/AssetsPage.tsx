@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Box, Card, Typography, Table, TableBody, TableCell, TableHead, TableRow,
-  TableContainer, TableSortLabel, Snackbar, Alert, LinearProgress,
+  TableContainer, TableSortLabel, TablePagination, Snackbar, Alert, LinearProgress,
 } from '@mui/material'
 import { FONT_MONO } from '@/styles/theme'
 import { SearchField, Segmented, TintChip } from '@/components/common/Widgets'
@@ -24,13 +24,24 @@ const statusRank: Record<string, number> = { live: 3, resolving: 2, dns: 1, gone
 
 export function AssetsPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [assets, setAssets] = useState<Asset[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  // Seed the search from a ?q= query param (set by the global search bar).
+  const [search, setSearch] = useState(searchParams.get('q') ?? '')
   const [filter, setFilter] = useState<Filter>('all')
   const [sortBy, setSortBy] = useState<SortCol>('subdomain')
   const [dir, setDir] = useState<'asc' | 'desc'>('asc')
   const [toast, setToast] = useState('')
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(50)
+
+  // Keep the search box in sync when the ?q= param changes (e.g. a new global
+  // search while already on this page).
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (q !== null) setSearch(q)
+  }, [searchParams])
 
   const load = useCallback(async () => {
     try {
@@ -60,6 +71,13 @@ export function AssetsPage() {
       return a.subdomain.localeCompare(b.subdomain) * sign
     })
   }, [assets, search, filter, sortBy, dir])
+
+  useEffect(() => { setPage(0) }, [search, filter, sortBy, dir])
+
+  const paged = useMemo(
+    () => rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+    [rows, page, rowsPerPage],
+  )
 
   const sort = (col: SortCol) => {
     if (sortBy === col) setDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -96,7 +114,7 @@ export function AssetsPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((a) => {
+              {paged.map((a) => {
                 const st = assetStatus(a)
                 const ips = (a.resolved_ips ?? []).slice(0, 2).join(', ') || (a.cname ? `CNAME ${a.cname}` : '—')
                 return (
@@ -115,6 +133,17 @@ export function AssetsPage() {
             </TableBody>
           </Table>
         </TableContainer>
+        {rows.length > 0 && (
+          <TablePagination
+            component="div"
+            count={rows.length}
+            page={page}
+            onPageChange={(_, p) => setPage(p)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0) }}
+            rowsPerPageOptions={[25, 50, 100, 200]}
+          />
+        )}
       </Card>
 
       <Snackbar open={!!toast} autoHideDuration={3000} onClose={() => setToast('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>

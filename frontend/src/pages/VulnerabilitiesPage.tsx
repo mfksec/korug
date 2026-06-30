@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Box, Button, Card, Avatar, Typography, Table, TableBody, TableCell, TableHead,
-  TableRow, TableContainer, TableSortLabel, Select, MenuItem, useTheme, Snackbar, Alert,
+  TableRow, TableContainer, TableSortLabel, TablePagination, Select, MenuItem, useTheme, Snackbar, Alert,
   LinearProgress,
 } from '@mui/material'
 import FileDownloadOutlined from '@mui/icons-material/FileDownloadOutlined'
 import { FONT_MONO } from '@/styles/theme'
 import { SearchField, Segmented, ConfidenceBar, vulnTypeMeta } from '@/components/common/Widgets'
 import { fetchVulnerabilities, setVulnerabilityFalsePositive } from '@/data/apiAdapters'
+import { downloadCsv } from '@/utils/download'
 import { apiErrorMessage } from '@/utils/apiError'
 import { Vulnerability, VulnType } from '@/types/domain'
 
@@ -23,6 +24,8 @@ export function VulnerabilitiesPage() {
   const [sortBy, setSortBy] = useState<SortCol>('confidence_score')
   const [dir, setDir] = useState<'asc' | 'desc'>('desc')
   const [toast, setToast] = useState('')
+  const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(25)
 
   const load = useCallback(async () => {
     try {
@@ -46,6 +49,22 @@ export function VulnerabilitiesPage() {
       return String(a[sortBy]).localeCompare(String(b[sortBy])) * sign
     })
   }, [vulns, search, type, status, sortBy, dir])
+
+  // Reset to the first page whenever the result set changes.
+  useEffect(() => { setPage(0) }, [search, type, status, sortBy, dir])
+
+  const paged = useMemo(
+    () => rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+    [rows, page, rowsPerPage],
+  )
+
+  const exportCsv = () => {
+    downloadCsv(
+      `korug-vulnerabilities-${new Date().toISOString().slice(0, 10)}.csv`,
+      ['Host', 'Domain', 'Type', 'Confidence', 'Status', 'Found'],
+      rows.map((v) => [v.host, v.domain, v.vuln_type, v.confidence_score, v.status, v.found_at]),
+    )
+  }
 
   const sort = (col: SortCol) => {
     if (sortBy === col) setDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -83,7 +102,7 @@ export function VulnerabilitiesPage() {
         </Select>
         <Segmented value={status} onChange={setStatus} options={[{ value: 'open', label: 'Open' }, { value: 'false_positive', label: 'False positive' }, { value: 'all', label: 'All' }]} />
         <Box sx={{ flex: 1 }} />
-        <Button variant="outlined" color="inherit" startIcon={<FileDownloadOutlined />} sx={{ borderColor: 'divider', color: 'text.secondary' }}>Export</Button>
+        <Button variant="outlined" color="inherit" startIcon={<FileDownloadOutlined />} onClick={exportCsv} disabled={rows.length === 0} sx={{ borderColor: 'divider', color: 'text.secondary' }}>Export CSV</Button>
       </Box>
 
       {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
@@ -101,7 +120,7 @@ export function VulnerabilitiesPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((v) => {
+              {paged.map((v) => {
                 const m = vulnTypeMeta(v.vuln_type)
                 const open = v.status === 'open'
                 return (
@@ -132,6 +151,17 @@ export function VulnerabilitiesPage() {
             </TableBody>
           </Table>
         </TableContainer>
+        {rows.length > 0 && (
+          <TablePagination
+            component="div"
+            count={rows.length}
+            page={page}
+            onPageChange={(_, p) => setPage(p)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0) }}
+            rowsPerPageOptions={[25, 50, 100]}
+          />
+        )}
       </Card>
 
       <Snackbar open={!!toast} autoHideDuration={2600} onClose={() => setToast('')} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>

@@ -49,6 +49,12 @@ export function AppLayout() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [activeAlerts, setActiveAlerts] = useState(0)
   const [activeScans, setActiveScans] = useState(0)
+  const [query, setQuery] = useState('')
+
+  const submitSearch = () => {
+    const q = query.trim()
+    if (q) navigate(`/assets?q=${encodeURIComponent(q)}`)
+  }
   const sb = theme.palette.sidebar
 
   const isActive = (path: string) =>
@@ -155,6 +161,9 @@ export function AppLayout() {
               <TextField
                 size="small"
                 placeholder="Search domains, subdomains, hosts…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') submitSearch() }}
                 sx={{ width: '100%', maxWidth: 440, '& .MuiOutlinedInput-root': { bgcolor: 'background.default' } }}
                 InputProps={{ startAdornment: <InputAdornment position="start"><SearchOutlined sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
               />
